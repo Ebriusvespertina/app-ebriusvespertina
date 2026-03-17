@@ -1,0 +1,72 @@
+---
+import AppGrid from '../components/AppGrid.astro';
+import AppHubHero from '../components/AppHubHero.astro';
+import { apps } from '../data/apps';
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="theme-color" content="#0f172a" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Dispuut Apps</title>
+		<style>
+			:root {
+				color-scheme: dark;
+				font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+				background: #020617;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				min-height: 100dvh;
+				background:
+					radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 30%),
+					radial-gradient(circle at 85% 0%, rgba(16, 185, 129, 0.12), transparent 26%),
+					linear-gradient(180deg, #0f172a 0%, #020617 100%);
+				color: #e2e8f0;
+				-webkit-font-smoothing: antialiased;
+				text-rendering: optimizeLegibility;
+			}
+
+			main {
+				max-width: 72rem;
+				margin: 0 auto;
+				padding: 1rem;
+				display: grid;
+				gap: 1rem;
+				align-content: start;
+				min-height: 100dvh;
+			}
+
+			@media (min-width: 48rem) {
+				main {
+					padding: 1.5rem;
+					gap: 1.25rem;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<AppHubHero
+				badge="App.website"
+				title="Dispuut Apps"
+				description="Een startpagina voor drankspellen en andere apps van Dispuut Ebrius Vespertina."
+			/>
+
+			<AppGrid
+				apps={apps}
+				title="Beschikbare apps"
+				subtitle="Wil je zelf een app? Maak die dan zelf!"
+			/>
+		</main>
+	</body>
+</html>

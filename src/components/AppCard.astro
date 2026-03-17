@@ -1,0 +1,102 @@
+---
+import type { AppItem } from '../data/apps';
+
+export interface Props {
+	app: AppItem & { maker: string };
+}
+
+const { app } = Astro.props;
+---
+
+<a class="card" href={app.href} style={`--accent: ${app.accent};`}>
+	<span class="icon" aria-hidden="true">{app.icon}</span>
+	<span class="content">
+		<span class="topline">
+			<strong>{app.name}</strong>
+			<span class="arrow" aria-hidden="true">↗</span>
+		</span>
+		<span class="description">{app.description}</span>
+			<span class="meta">Door {app.maker}</span>
+	</span>
+</a>
+
+<style>
+	.card {
+		display: grid;
+		grid-template-columns: 3rem minmax(0, 1fr);
+		gap: 0.9rem;
+		align-items: center;
+		padding: 1rem;
+		border-radius: 1rem;
+		text-decoration: none;
+		color: inherit;
+		background:
+			linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.72)),
+			radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 22%, transparent), transparent 48%);
+		border: 1px solid color-mix(in srgb, var(--accent) 28%, rgba(148, 163, 184, 0.24));
+		box-shadow: 0 14px 30px rgba(2, 6, 23, 0.22);
+		transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+	}
+
+	.card:hover,
+	.card:focus-visible {
+		transform: translateY(-2px);
+		border-color: color-mix(in srgb, var(--accent) 70%, white 10%);
+	}
+
+	.icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 3rem;
+		height: 3rem;
+		border-radius: 0.95rem;
+		background: color-mix(in srgb, var(--accent) 20%, rgba(15, 23, 42, 0.92));
+		border: 1px solid color-mix(in srgb, var(--accent) 42%, rgba(255, 255, 255, 0.08));
+		font-size: 1.1rem;
+		line-height: 1;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	}
+
+	.content {
+		min-width: 0;
+		display: grid;
+		gap: 0.22rem;
+	}
+
+	.topline {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	strong {
+		font-size: 1rem;
+		letter-spacing: -0.01em;
+	}
+
+	.arrow {
+		flex: none;
+		color: color-mix(in srgb, var(--accent) 78%, white 10%);
+	}
+
+	.description {
+		font-size: 0.94rem;
+		line-height: 1.45;
+		color: #cbd5e1;
+	}
+
+	.meta {
+		font-size: 0.76rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: color-mix(in srgb, var(--accent) 72%, #e2e8f0 18%);
+	}
+
+	@media (min-width: 48rem) {
+		.card {
+			padding: 1.1rem;
+		}
+	}
+</style>
