@@ -33,7 +33,7 @@ const { apps, title = 'Apps', subtitle = 'Kies een subpagina om direct fullscree
 <style>
 	.section {
 		display: grid;
-		gap: 0.9rem;
+		gap: var(--space-4);
 	}
 
 	.section-head {
@@ -51,7 +51,7 @@ const { apps, title = 'Apps', subtitle = 'Kies een subpagina om direct fullscree
 
 	p {
 		margin: 0.25rem 0 0;
-		font-size: 0.92rem;
+		font-size: var(--font-size-sm);
 		line-height: 1.5;
 		color: #94a3b8;
 	}
@@ -61,14 +61,14 @@ const { apps, title = 'Apps', subtitle = 'Kies een subpagina om direct fullscree
 		align-items: center;
 		gap: 0.35rem;
 		flex: none;
-		padding: 0.35rem 0.7rem;
-		border-radius: 999px;
-		font-size: 0.74rem;
+		padding: var(--space-1) var(--space-3);
+		border-radius: var(--radius-pill);
+		font-size: var(--font-size-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		color: #cbd5e1;
 		background: rgba(15, 23, 42, 0.7);
-		border: 1px solid rgba(148, 163, 184, 0.18);
+		border: 1px solid var(--border-subtle);
 	}
 
 	ul {
@@ -76,7 +76,7 @@ const { apps, title = 'Apps', subtitle = 'Kies een subpagina om direct fullscree
 		padding: 0;
 		margin: 0;
 		display: grid;
-		gap: 0.8rem;
+		gap: var(--space-4);
 	}
 
 	@media (min-width: 48rem) {

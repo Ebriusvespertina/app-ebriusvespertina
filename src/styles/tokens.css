@@ -1,0 +1,35 @@
+:root {
+  --font-family-base:
+    Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #e2e8f0;
+  --color-slate-200: #cbd5e1;
+  --color-slate-300: #94a3b8;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+
+  --border-subtle: rgba(148, 163, 184, 0.18);
+  --border-muted: rgba(148, 163, 184, 0.24);
+  --border-strong: rgba(148, 163, 184, 0.4);
+
+  --space-1: 0.35rem;
+  --space-2: 0.5rem;
+  --space-3: 0.7rem;
+  --space-4: 0.9rem;
+  --space-5: 1rem;
+  --space-6: 1.25rem;
+  --space-7: 1.5rem;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.65rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 14px 30px rgba(2, 6, 23, 0.22);
+  --shadow-soft: 0 16px 50px rgba(2, 6, 23, 0.4);
+  --shadow-wheel: 0 24px 46px rgba(2, 6, 23, 0.55);
+}

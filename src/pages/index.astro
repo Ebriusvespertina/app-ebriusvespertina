@@ -14,10 +14,12 @@ import { apps } from '../data/apps';
 		<meta name="generator" content={Astro.generator} />
 		<title>Dispuut Apps</title>
 		<style>
+			@import '../styles/tokens.css';
+
 			:root {
 				color-scheme: dark;
-				font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-				background: #020617;
+				font-family: var(--font-family-base);
+				background: var(--color-slate-950);
 			}
 
 			* {

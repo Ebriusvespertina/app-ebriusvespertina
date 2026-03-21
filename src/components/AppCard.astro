@@ -27,17 +27,17 @@ const { app } = Astro.props;
 	.card {
 		display: grid;
 		grid-template-columns: 3rem minmax(0, 1fr);
-		gap: 0.9rem;
+		gap: var(--space-4);
 		align-items: center;
-		padding: 1rem;
-		border-radius: 1rem;
+		padding: var(--space-5);
+		border-radius: var(--radius-lg);
 		text-decoration: none;
 		color: inherit;
 		background:
 			linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.72)),
 			radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 22%, transparent), transparent 48%);
 		border: 1px solid color-mix(in srgb, var(--accent) 28%, rgba(148, 163, 184, 0.24));
-		box-shadow: 0 14px 30px rgba(2, 6, 23, 0.22);
+		box-shadow: var(--shadow-card);
 		transition: transform 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
 	}
 
