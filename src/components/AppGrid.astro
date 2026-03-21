@@ -1,4 +1,5 @@
 ---
+import { Icon } from 'astro-icon/components';
 import AppCard from './AppCard.astro';
 import type { AppItem } from '../data/apps';
 
@@ -17,7 +18,7 @@ const { apps, title = 'Apps', subtitle = 'Kies een subpagina om direct fullscree
 			<h2>{title}</h2>
 			<p>{subtitle}</p>
 		</div>
-		<span class="count">{apps.length} live</span>
+		<span class="count"><Icon name="lucide:activity" width={12} height={12} /> {apps.length} live</span>
 	</div>
 
 	<ul>
@@ -56,6 +57,9 @@ const { apps, title = 'Apps', subtitle = 'Kies een subpagina om direct fullscree
 	}
 
 	.count {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		flex: none;
 		padding: 0.35rem 0.7rem;
 		border-radius: 999px;

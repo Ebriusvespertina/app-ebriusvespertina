@@ -13,7 +13,10 @@
   },
   "dependencies": {
     "@astrojs/vue": "^6.0.1",
+    "@iconify-json/lucide": "^1.2.98",
+    "@iconify-json/mdi": "^1.2.3",
     "astro": "^6.0.5",
+    "astro-icon": "^1.1.5",
     "vue": "^3.5.30"
   }
 }

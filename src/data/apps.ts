@@ -13,7 +13,7 @@ export const apps: AppItem[] = [
     description: "Houd bij wie het snelst een bak kan trekken.",
     maker: "Iemand",
     href: "/apps/scorebord",
-    icon: "🏆",
+    icon: "lucide:trophy",
     accent: "#f59e0b",
   },
   {
@@ -21,7 +21,7 @@ export const apps: AppItem[] = [
     description: "Voor dertigen of wat anders.",
     maker: "Niemand",
     href: "/apps/dobbelstenen",
-    icon: "🎲",
+    icon: "lucide:dice-5",
     accent: "#10b981",
   },
   {
@@ -29,7 +29,7 @@ export const apps: AppItem[] = [
     description: "Wie gokt op het snelste paard?",
     maker: "Peet",
     href: "/apps/paardenracen",
-    icon: "🐴",
+    icon: "mdi:horse",
     accent: "#a855f7",
   },
   {
@@ -37,15 +37,7 @@ export const apps: AppItem[] = [
     description: "Maak een keuze met kans.",
     maker: "Holland Casino",
     href: "/apps/radje-draaien",
-    icon: "🎡",
+    icon: "lucide:loader-pinwheel",
     accent: "#fb7185",
-  },
-  {
-    name: "Slotmachine",
-    description: "Gok met een slotmachine.",
-    maker: "Holland Casino",
-    href: "/apps/slotmachine",
-    icon: "🎰",
-    accent: "#3b82f6",
   },
 ];

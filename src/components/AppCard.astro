@@ -1,4 +1,5 @@
 ---
+import { Icon } from 'astro-icon/components';
 import type { AppItem } from '../data/apps';
 
 export interface Props {
@@ -9,14 +10,16 @@ const { app } = Astro.props;
 ---
 
 <a class="card" href={app.href} style={`--accent: ${app.accent};`}>
-	<span class="icon" aria-hidden="true">{app.icon}</span>
+	<span class="icon" aria-hidden="true">
+		<Icon name={app.icon} width={32} height={32} />
+	</span>
 	<span class="content">
 		<span class="topline">
 			<strong>{app.name}</strong>
-			<span class="arrow" aria-hidden="true">↗</span>
+			<span class="arrow" aria-hidden="true"><Icon name="lucide:arrow-up-right" width={16} height={16} /></span>
 		</span>
 		<span class="description">{app.description}</span>
-			<span class="meta">Door {app.maker}</span>
+		<span class="meta"><Icon name="lucide:user-round" width={12} height={12} /> Door {app.maker}</span>
 	</span>
 </a>
 
@@ -53,9 +56,12 @@ const { app } = Astro.props;
 		border-radius: 0.95rem;
 		background: color-mix(in srgb, var(--accent) 20%, rgba(15, 23, 42, 0.92));
 		border: 1px solid color-mix(in srgb, var(--accent) 42%, rgba(255, 255, 255, 0.08));
-		font-size: 1.1rem;
 		line-height: 1;
 		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	}
+
+	.icon :global(svg) {
+		display: block;
 	}
 
 	.content {
@@ -88,6 +94,9 @@ const { app } = Astro.props;
 	}
 
 	.meta {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		font-size: 0.76rem;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
