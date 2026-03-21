@@ -1,0 +1,698 @@
+---
+import { Icon } from 'astro-icon/components';
+---
+
+<html lang="nl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Radje Draaien</title>
+		<style>
+			:root {
+				color-scheme: dark;
+				font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				min-height: 100dvh;
+				background:
+					radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 35%),
+					linear-gradient(180deg, #0f172a 0%, #020617 100%);
+				color: #e2e8f0;
+			}
+
+			main {
+				max-width: 58rem;
+				margin: 0 auto;
+				padding: 1rem;
+				display: grid;
+				gap: 1rem;
+			}
+
+			.panel {
+				background: rgba(15, 23, 42, 0.72);
+				border: 1px solid rgba(148, 163, 184, 0.24);
+				border-radius: 1rem;
+				padding: 1rem;
+			}
+
+			h1 {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.55rem;
+				margin: 0;
+				font-size: clamp(1.5rem, 7vw, 2rem);
+			}
+
+			p {
+				margin: 0.55rem 0 0;
+				color: #cbd5e1;
+				font-size: 0.95rem;
+			}
+
+			.wheel-wrap {
+				display: grid;
+				place-items: center;
+			}
+
+			.wheel-box {
+				position: relative;
+				width: min(86vw, 24rem);
+				aspect-ratio: 1;
+			}
+
+			.pointer {
+				position: absolute;
+				top: -0.75rem;
+				left: 50%;
+				transform: translateX(-50%);
+				width: 0;
+				height: 0;
+				border-left: 0.55rem solid transparent;
+				border-right: 0.55rem solid transparent;
+				border-top: 0.95rem solid #f8fafc;
+				filter: drop-shadow(0 6px 10px rgba(2, 6, 23, 0.45));
+				z-index: 4;
+			}
+
+			.wheel {
+				position: relative;
+				overflow: hidden;
+				width: 100%;
+				height: 100%;
+				border-radius: 999px;
+				border: none;
+				box-shadow:
+					0 24px 46px rgba(2, 6, 23, 0.55),
+					inset 0 0 0 6px rgba(248, 250, 252, 0.14),
+					inset 0 0 0 8px rgba(15, 23, 42, 0.65);
+				cursor: pointer;
+			}
+
+			.wheel-rotor {
+				position: absolute;
+				inset: 0;
+				transition: transform 4.6s cubic-bezier(0.15, 0.8, 0.1, 1);
+			}
+
+			:global(.wheel-svg) {
+				width: 100%;
+				height: 100%;
+				display: block;
+			}
+
+			:global(.wheel-segment-label) {
+				font-size: 3px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.03em;
+				fill: #f8fafc;
+				paint-order: stroke;
+				stroke: rgba(2, 6, 23, 0.65);
+				stroke-width: 0.8px;
+				stroke-linejoin: round;
+				text-anchor: middle;
+				dominant-baseline: hanging;
+				writing-mode: vertical-rl;
+				text-orientation: upright;
+				pointer-events: none;
+			}
+
+			.spin {
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				z-index: 3;
+				border: none;
+				border-radius: 999px;
+        aspect-ratio: 1;
+				padding: 0.95rem 1.15rem;
+				font-size: 0.92rem;
+				font-weight: 700;
+				letter-spacing: 0.02em;
+				background: #e2e8f0;
+				color: #0f172a;
+				box-shadow: 0 8px 20px rgba(15, 23, 42, 0.38);
+				cursor: pointer;
+			}
+
+			.spin:disabled {
+				opacity: 0.65;
+				cursor: not-allowed;
+			}
+
+			.result {
+				margin-top: 0.9rem;
+				font-size: 0.95rem;
+				font-weight: 600;
+				text-align: center;
+				min-height: 1.4rem;
+			}
+
+			.controls {
+				display: grid;
+				gap: 0.7rem;
+			}
+
+			.form-row {
+				display: grid;
+				grid-template-columns: 1fr 6.5rem auto;
+				gap: 0.5rem;
+			}
+
+			input,
+			button,
+			select {
+				font: inherit;
+			}
+
+			input {
+				width: 100%;
+				padding: 0.65rem 0.7rem;
+				border: 1px solid rgba(148, 163, 184, 0.28);
+				background: rgba(15, 23, 42, 0.9);
+				color: inherit;
+				border-radius: 0.65rem;
+				outline: none;
+				transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+			}
+
+			input::placeholder {
+				color: #94a3b8;
+			}
+
+			input:focus-visible {
+				border-color: rgba(56, 189, 248, 0.9);
+				box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.22);
+				background: rgba(15, 23, 42, 0.98);
+			}
+
+			button.add {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.35rem;
+				border: 1px solid rgba(148, 163, 184, 0.4);
+				padding: 0.65rem 0.85rem;
+				border-radius: 0.65rem;
+				background: rgba(30, 41, 59, 0.9);
+				color: #e2e8f0;
+				font-weight: 700;
+				cursor: pointer;
+				transition: border-color 0.15s ease, background-color 0.15s ease;
+			}
+
+			button.add:hover,
+			button.add:focus-visible {
+				border-color: rgba(148, 163, 184, 0.65);
+				background: rgba(51, 65, 85, 0.95);
+			}
+
+			button.add:active {
+				background: rgba(30, 41, 59, 1);
+			}
+
+			.list {
+				list-style: none;
+				padding: 0;
+				margin: 0;
+				display: grid;
+				gap: 0.5rem;
+			}
+
+			:global(.item) {
+				display: grid;
+				grid-template-columns: 0.9rem 1fr 6rem 5.2rem 2.1rem;
+				gap: 0.45rem;
+				align-items: center;
+				padding: 0.4rem;
+				border-radius: 0.7rem;
+				background: rgba(15, 23, 42, 0.52);
+				border: 1px solid rgba(148, 163, 184, 0.16);
+			}
+
+			:global(.color-dot) {
+				width: 0.72rem;
+				height: 0.72rem;
+				border-radius: 999px;
+				border: 1px solid rgba(248, 250, 252, 0.5);
+				box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.6);
+			}
+
+			:global(.item-input) {
+				height: 2.25rem;
+				padding: 0.45rem 0.55rem;
+				border-radius: 0.5rem;
+				background: rgba(15, 23, 42, 0.95);
+				border: 1px solid rgba(148, 163, 184, 0.3);
+				font-size: 0.92rem;
+			}
+
+			:global(.item-input:focus-visible) {
+				border-color: rgba(148, 163, 184, 0.75);
+				box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.2);
+			}
+
+			:global(.percent) {
+				font-size: 0.82rem;
+				text-align: right;
+				color: #cbd5e1;
+			}
+
+			:global(.remove) {
+				border: none;
+				height: 2.35rem;
+				border-radius: 0.55rem;
+				background: rgba(248, 113, 113, 0.2);
+				color: #fecaca;
+				cursor: pointer;
+			}
+
+			.summary {
+				font-size: 0.84rem;
+				color: #94a3b8;
+				padding: 0.25rem 0.1rem;
+			}
+
+			h2 {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.45rem;
+				margin: 0 0 0.6rem;
+				font-size: 1rem;
+			}
+
+			.history {
+				list-style: none;
+				padding: 0;
+				margin: 0;
+				display: grid;
+				gap: 0.45rem;
+			}
+
+			:global(.history li) {
+				display: grid;
+				grid-template-columns: 7.2rem 1fr;
+				align-items: baseline;
+				column-gap: 0.85rem;
+				padding: 0.62rem 0.7rem;
+				border-radius: 0.65rem;
+				background: rgba(15, 23, 42, 0.7);
+				border: 1px solid rgba(148, 163, 184, 0.22);
+				font-size: 0.9rem;
+			}
+
+			:global(.history .winner) {
+				font-weight: 600;
+				color: #e2e8f0;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			:global(.history time) {
+				display: block;
+				font-size: 0.8rem;
+				font-variant-numeric: tabular-nums;
+				color: #cbd5e1;
+				text-align: left;
+			}
+
+			:global(.history .empty) {
+				display: block;
+				color: #94a3b8;
+			}
+
+			@media (min-width: 56rem) {
+				main {
+					grid-template-columns: 1.05fr 1fr;
+					align-items: start;
+				}
+
+				.hero {
+					grid-column: 1 / -1;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<section class="panel hero">
+				<h1><Icon name="lucide:loader-pinwheel" width={32} height={32} /> Radje draaien</h1>
+				<p>
+					Voeg keuzes toe, geef eventueel een gewicht mee, en draai het rad. Gewichten worden
+					automatisch omgerekend naar 100% (360°).
+				</p>
+			</section>
+
+			<section class="panel wheel-wrap" aria-label="Rad">
+				<div class="wheel-box">
+					<div class="pointer" aria-hidden="true"></div>
+					<div id="wheel" class="wheel" role="button" tabindex="0" aria-label="Draai het rad">
+						<div id="wheelRotor" class="wheel-rotor"></div>
+					</div>
+					<button id="spinButton" class="spin" type="button"><Icon name="lucide:rotate-cw" width={14} height={14} /> SPIN</button>
+				</div>
+				<div id="result" class="result" aria-live="polite"></div>
+			</section>
+
+			<section class="panel controls" aria-label="Instellingen">
+				<form id="addForm" class="form-row">
+					<input id="newLabel" placeholder="Nieuwe keuze" required minlength="1" />
+					<input id="newWeight" type="number" min="0.1" step="0.1" placeholder="Gewicht" />
+					<button class="add" type="submit"><Icon name="lucide:plus" width={14} height={14} /> Toevoegen</button>
+				</form>
+				<div id="summary" class="summary"></div>
+				<ul id="choiceList" class="list"></ul>
+			</section>
+
+			<section class="panel" aria-label="Geschiedenis">
+				<h2><Icon name="lucide:history" width={16} height={16} /> Win geschiedenis</h2>
+				<ul id="history" class="history"></ul>
+			</section>
+		</main>
+
+		<script>
+			type Choice = { id: string; label: string; weight: number };
+			type SpinRecord = { label: string; time: string; iso: string };
+
+			const palette = ['#38bdf8', '#f59e0b', '#34d399', '#a78bfa', '#fb7185', '#22d3ee', '#f97316', '#84cc16'];
+			const MIN_WEIGHT = 0.1;
+
+			let choices: Choice[] = [
+				{ id: crypto.randomUUID(), label: 'Bier', weight: 1 },
+				{ id: crypto.randomUUID(), label: 'Shotje', weight: 1 },
+				{ id: crypto.randomUUID(), label: 'Water', weight: 1 },
+			];
+
+			let spinHistory: SpinRecord[] = [];
+			let currentRotation = 0;
+			let isSpinning = false;
+			let pendingWinner: string | null = null;
+
+			const wheel = document.querySelector<HTMLDivElement>('#wheel')!;
+			const wheelRotor = document.querySelector<HTMLDivElement>('#wheelRotor')!;
+			const spinButton = document.querySelector<HTMLButtonElement>('#spinButton')!;
+			const resultEl = document.querySelector<HTMLDivElement>('#result')!;
+			const addForm = document.querySelector<HTMLFormElement>('#addForm')!;
+			const newLabelInput = document.querySelector<HTMLInputElement>('#newLabel')!;
+			const newWeightInput = document.querySelector<HTMLInputElement>('#newWeight')!;
+			const listEl = document.querySelector<HTMLUListElement>('#choiceList')!;
+			const summaryEl = document.querySelector<HTMLDivElement>('#summary')!;
+			const historyEl = document.querySelector<HTMLUListElement>('#history')!;
+
+			function totalWeight() {
+				return choices.reduce((sum, item) => sum + item.weight, 0);
+			}
+
+			function clampWeight(value: number) {
+				if (!Number.isFinite(value)) {
+					return 1;
+				}
+				return Math.max(value, MIN_WEIGHT);
+			}
+
+			function percentages() {
+				const total = totalWeight();
+				if (total <= 0) {
+					return choices.map(() => 0);
+				}
+				return choices.map((item) => (item.weight / total) * 100);
+			}
+
+			function pointOnCircle(angleDeg: number, radius: number) {
+				const radians = ((angleDeg - 90) * Math.PI) / 180;
+				return {
+					x: 50 + Math.cos(radians) * radius,
+					y: 50 + Math.sin(radians) * radius,
+				};
+			}
+
+			function makeSlicePath(startDeg: number, endDeg: number, radius: number) {
+				const startPoint = pointOnCircle(startDeg, radius);
+				const endPoint = pointOnCircle(endDeg, radius);
+				const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+				return `M 50 50 L ${startPoint.x} ${startPoint.y} A ${radius} ${radius} 0 ${largeArc} 1 ${endPoint.x} ${endPoint.y} Z`;
+			}
+
+			function shortenLabel(rawLabel: string, maxChars: number) {
+				const clean = rawLabel.trim();
+				if (!clean) {
+					return '';
+				}
+				return clean.length > maxChars ? `${clean.slice(0, Math.max(maxChars - 1, 1))}…` : clean;
+			}
+
+			function renderWheel() {
+				wheelRotor.innerHTML = '';
+
+				if (!choices.length) {
+					wheel.style.background = '#334155';
+					return;
+				}
+				wheel.style.background = 'none';
+
+				const svgNamespace = 'http://www.w3.org/2000/svg';
+				const svg = document.createElementNS(svgNamespace, 'svg');
+				svg.setAttribute('viewBox', '0 0 100 100');
+				svg.setAttribute('class', 'wheel-svg');
+				svg.setAttribute('aria-hidden', 'true');
+
+				const parts = percentages();
+				let startDeg = 0;
+				choices.forEach((choice, index) => {
+					const sliceDeg = parts[index] * 3.6;
+					const endDeg = startDeg + sliceDeg;
+					const color = palette[index % palette.length];
+
+					const path = document.createElementNS(svgNamespace, 'path');
+					path.setAttribute('d', makeSlicePath(startDeg, endDeg, 49));
+					path.setAttribute('fill', color);
+					svg.append(path);
+
+					if (sliceDeg >= 8) {
+						const midDeg = startDeg + sliceDeg / 2;
+						const maxChars = sliceDeg < 18 ? 6 : sliceDeg < 30 ? 9 : 12;
+
+						const text = document.createElementNS(svgNamespace, 'text');
+						text.setAttribute('class', 'wheel-segment-label');
+						text.setAttribute('x', '50');
+						text.setAttribute('y', '12');
+						text.setAttribute('transform', `rotate(${midDeg} 50 50)`);
+						text.textContent = shortenLabel(choice.label, maxChars);
+
+						svg.append(text);
+					}
+
+					startDeg = endDeg;
+				});
+
+				wheelRotor.append(svg);
+			}
+
+			function renderChoices() {
+				listEl.innerHTML = '';
+				const shares = percentages();
+
+				choices.forEach((choice, index) => {
+					const li = document.createElement('li');
+					li.className = 'item';
+
+					const dot = document.createElement('span');
+					dot.className = 'color-dot';
+					dot.style.backgroundColor = palette[index % palette.length];
+					dot.setAttribute('aria-hidden', 'true');
+
+					const labelInput = document.createElement('input');
+					labelInput.className = 'item-input';
+					labelInput.value = choice.label;
+					labelInput.addEventListener('input', () => {
+						choice.label = labelInput.value.trim() || 'Onbekend';
+						renderWheel();
+					});
+
+					const weightInput = document.createElement('input');
+					weightInput.className = 'item-input';
+					weightInput.type = 'number';
+					weightInput.min = String(MIN_WEIGHT);
+					weightInput.step = '0.1';
+					weightInput.value = String(choice.weight);
+					weightInput.addEventListener('input', () => {
+						choice.weight = clampWeight(Number(weightInput.value));
+						weightInput.value = String(choice.weight);
+						render();
+					});
+
+					const percent = document.createElement('span');
+					percent.className = 'percent';
+					percent.textContent = `${shares[index].toFixed(1)}%`;
+
+					const remove = document.createElement('button');
+					remove.type = 'button';
+					remove.className = 'remove';
+					remove.textContent = '×';
+					remove.setAttribute('aria-label', `Verwijder ${choice.label}`);
+					remove.addEventListener('click', () => {
+						choices = choices.filter((item) => item.id !== choice.id);
+						render();
+					});
+
+					li.append(dot, labelInput, weightInput, percent, remove);
+					listEl.append(li);
+				});
+
+				summaryEl.textContent = `Totaal gewicht: ${totalWeight().toFixed(1)} · Altijd genormaliseerd naar 100% / 360°.`;
+			}
+
+			function renderHistory() {
+				historyEl.innerHTML = '';
+
+				if (!spinHistory.length) {
+					const empty = document.createElement('li');
+					empty.className = 'empty';
+					empty.textContent = 'Nog geen spins gedaan.';
+					historyEl.append(empty);
+					return;
+				}
+
+				spinHistory.forEach((item) => {
+					const li = document.createElement('li');
+					const time = document.createElement('time');
+					time.dateTime = item.iso;
+					time.textContent = item.time;
+
+					const winner = document.createElement('span');
+					winner.className = 'winner';
+					winner.textContent = item.label;
+
+					li.append(time, winner);
+					historyEl.append(li);
+				});
+			}
+
+			function formatTimeWithMs(date: Date) {
+				const hh = String(date.getHours()).padStart(2, '0');
+				const mm = String(date.getMinutes()).padStart(2, '0');
+				const ss = String(date.getSeconds()).padStart(2, '0');
+				const ms = String(date.getMilliseconds()).padStart(3, '0');
+				return `${hh}:${mm}:${ss}.${ms}`;
+			}
+
+			function pickWinner() {
+				const total = totalWeight();
+				if (total <= 0 || choices.length === 0) {
+					return null;
+				}
+
+				const roll = Math.random() * total;
+				let cursor = 0;
+
+				for (let index = 0; index < choices.length; index += 1) {
+					cursor += choices[index].weight;
+					if (roll <= cursor) {
+						return index;
+					}
+				}
+
+				return choices.length - 1;
+			}
+
+			function spin() {
+				if (isSpinning || !choices.length) {
+					return;
+				}
+
+				const winnerIndex = pickWinner();
+				if (winnerIndex === null) {
+					resultEl.textContent = 'Geef minimaal één keuze met gewicht > 0.';
+					return;
+				}
+
+				const total = totalWeight();
+				let start = 0;
+				for (let i = 0; i < winnerIndex; i += 1) {
+					start += (choices[i].weight / total) * 360;
+				}
+				const span = (choices[winnerIndex].weight / total) * 360;
+
+				const edgeMargin = Math.min(8, span * 0.2);
+				const canRandomizeInsideSlice = span > edgeMargin * 2;
+				const landingAngleInSlice = canRandomizeInsideSlice
+					? start + edgeMargin + Math.random() * (span - edgeMargin * 2)
+					: start + span / 2;
+
+				const targetNormalized = (360 - landingAngleInSlice) % 360;
+				const currentNormalized = ((currentRotation % 360) + 360) % 360;
+				let delta = (targetNormalized - currentNormalized + 360) % 360;
+				if (delta < 120) {
+					delta += 360;
+				}
+
+				const fullTurns = 4 + Math.floor(Math.random() * 3);
+				currentRotation += fullTurns * 360 + delta;
+				pendingWinner = choices[winnerIndex].label;
+				isSpinning = true;
+				spinButton.disabled = true;
+				resultEl.textContent = 'Draaien...';
+				wheelRotor.style.transform = `rotate(${currentRotation}deg)`;
+			}
+
+			function render() {
+				renderWheel();
+				renderChoices();
+				renderHistory();
+			}
+
+			wheel.addEventListener('click', spin);
+			wheel.addEventListener('keydown', (event: KeyboardEvent) => {
+				if (event.key === 'Enter' || event.key === ' ') {
+					event.preventDefault();
+					spin();
+				}
+			});
+			spinButton.addEventListener('click', spin);
+
+			wheelRotor.addEventListener('transitionend', () => {
+				if (!isSpinning || !pendingWinner) {
+					return;
+				}
+
+				isSpinning = false;
+				spinButton.disabled = false;
+				resultEl.textContent = `Winnaar: ${pendingWinner}`;
+				const now = new Date();
+				spinHistory.unshift({
+					label: pendingWinner,
+					time: formatTimeWithMs(now),
+					iso: now.toISOString(),
+				});
+				spinHistory = spinHistory.slice(0, 10);
+				pendingWinner = null;
+				renderHistory();
+			});
+
+			addForm.addEventListener('submit', (event: SubmitEvent) => {
+				event.preventDefault();
+				const label = (newLabelInput.value || '').trim();
+				if (!label) {
+					return;
+				}
+
+				const rawWeight = Number(newWeightInput.value);
+				const weight = clampWeight(rawWeight);
+
+				choices.push({ id: crypto.randomUUID(), label, weight });
+				newLabelInput.value = '';
+				newWeightInput.value = '';
+				render();
+			});
+
+			render();
+		</script>
+	</body>
+</html>
