@@ -40,4 +40,12 @@ export const apps: AppItem[] = [
     icon: "lucide:loader-pinwheel",
     accent: "#fb7185",
   },
+  {
+    name: "Bakken Timer",
+    description: "Hoe snel trek je een bak?",
+    maker: "Bremer",
+    href: "/apps/bakken-timer",
+    icon: "lucide:beer",
+    accent: "#f59e0b",
+  },
 ];

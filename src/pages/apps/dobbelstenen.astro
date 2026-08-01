@@ -14,16 +14,12 @@ import PwaRegister from "../../components/PwaRegister.astro";
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Dobbelstenen" />
     <title>Dobbelstenen</title>
-    <style>
+    <style is:global>
       @import '../../styles/tokens.css';
 
       :root {
         color-scheme: dark;
         font-family: var(--font-family-base);
-      }
-
-      * {
-        box-sizing: border-box;
       }
 
       body {

@@ -19,17 +19,13 @@ import { apps } from '../data/apps';
 		<meta name="apple-mobile-web-app-title" content="D.E.V. Apps" />
 		<meta name="generator" content={Astro.generator} />
 		<title>D.E.V. Apps</title>
-		<style>
+		<style is:global>
 			@import '../styles/tokens.css';
 
 			:root {
 				color-scheme: dark;
 				font-family: var(--font-family-base);
 				background: var(--color-slate-950);
-			}
-
-			* {
-				box-sizing: border-box;
 			}
 
 			body {
