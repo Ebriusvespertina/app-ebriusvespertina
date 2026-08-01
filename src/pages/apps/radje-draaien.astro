@@ -7,7 +7,7 @@ import PwaRegister from '../../components/PwaRegister.astro';
   <head>
     <meta charset="utf-8" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -20,6 +20,7 @@ import PwaRegister from '../../components/PwaRegister.astro';
       :root {
         color-scheme: dark;
         font-family: var(--font-family-base);
+        -webkit-tap-highlight-color: transparent;
       }
 
       * {
@@ -30,9 +31,15 @@ import PwaRegister from '../../components/PwaRegister.astro';
         margin: 0;
         min-height: 100dvh;
         background:
-          radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 35%),
+          radial-gradient(circle at top left, rgba(251, 113, 133, 0.14), transparent 30%),
+          radial-gradient(circle at 85% 0%, rgba(56, 189, 248, 0.12), transparent 26%),
           linear-gradient(180deg, #0f172a 0%, #020617 100%);
         color: #e2e8f0;
+        padding:
+          env(safe-area-inset-top, 0)
+          env(safe-area-inset-right, 0)
+          env(safe-area-inset-bottom, 0)
+          env(safe-area-inset-left, 0);
       }
     </style>
   </head>

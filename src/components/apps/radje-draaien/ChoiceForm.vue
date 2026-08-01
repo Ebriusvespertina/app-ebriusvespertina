@@ -33,6 +33,8 @@ function submit() {
       v-model="newLabel"
       class="new-label"
       placeholder="Nieuwe keuze"
+      autocomplete="off"
+      enterkeyhint="done"
       required
       minlength="1"
     />

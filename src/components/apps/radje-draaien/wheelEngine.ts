@@ -2,6 +2,15 @@ import type { Choice } from "./types";
 
 export const MIN_WEIGHT = 0.1;
 
+export const SPIN_DURATION_MS = 4600;
+
+export function makeId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export const PALETTE = [
   "#38bdf8",
   "#f59e0b",
@@ -13,11 +22,11 @@ export const PALETTE = [
   "#84cc16",
 ];
 
-export function clampWeight(value: number) {
+export function clampWeight(value: number, min = MIN_WEIGHT) {
   if (!Number.isFinite(value)) {
-    return 1;
+    return Math.max(MIN_WEIGHT, min);
   }
-  return Math.max(value, MIN_WEIGHT);
+  return Math.max(value, min);
 }
 
 export function totalWeight(choices: Choice[]) {
@@ -33,22 +42,23 @@ export function percentages(choices: Choice[]) {
 }
 
 export function pickWinner(choices: Choice[]) {
-  const total = totalWeight(choices);
-  if (total <= 0 || choices.length === 0) {
+  const active = choices.filter((choice) => choice.weight > 0);
+  if (active.length === 0) {
     return null;
   }
 
+  const total = active.reduce((sum, choice) => sum + choice.weight, 0);
   const roll = Math.random() * total;
   let cursor = 0;
 
-  for (let index = 0; index < choices.length; index += 1) {
-    cursor += choices[index].weight;
+  for (const choice of active) {
+    cursor += choice.weight;
     if (roll <= cursor) {
-      return index;
+      return choices.indexOf(choice);
     }
   }
 
-  return choices.length - 1;
+  return choices.indexOf(active[active.length - 1]);
 }
 
 export function formatTimeWithMs(date: Date) {

@@ -66,6 +66,16 @@ function onSpinRequest() {
   }
 }
 
+function onTransitionEnd(event: TransitionEvent) {
+  if (event.target !== wheelRotorRef.value) {
+    return;
+  }
+  if (event.propertyName && event.propertyName !== "transform") {
+    return;
+  }
+  emit("spinEnd");
+}
+
 function getRotationFromElement(el: HTMLElement) {
   const transform = globalThis.getComputedStyle(el).transform;
   if (!transform || transform === "none") {
@@ -162,7 +172,7 @@ onBeforeUnmount(() => {
         ref="wheelRotorRef"
         class="wheel-rotor"
         :style="{ transform: `rotate(${rotation}deg)` }"
-        @transitionend="emit('spinEnd')"
+        @transitionend="onTransitionEnd"
       >
         <svg class="wheel-svg" viewBox="0 0 100 100" aria-hidden="true">
           <g v-for="segment in segments" :key="segment.key">
@@ -188,7 +198,7 @@ onBeforeUnmount(() => {
       :disabled="spinning"
       @click="onSpinRequest"
     >
-      SPIN
+      DRAAI
     </button>
   </div>
 </template>
@@ -281,6 +291,15 @@ onBeforeUnmount(() => {
   color: #0f172a;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.38);
   cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 0.1s ease,
+    opacity 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.spin:active:not(:disabled) {
+  transform: translate(-50%, -50%) scale(0.96);
 }
 
 .spin:disabled {
@@ -294,8 +313,14 @@ onBeforeUnmount(() => {
   }
 
   .spin {
-    padding: 0.8rem 1rem;
+    padding: 0.9rem 1.1rem;
     font-size: 0.84rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-rotor {
+    transition-duration: 0.001s;
   }
 }
 </style>

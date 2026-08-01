@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import ChoiceForm from "./ChoiceForm.vue";
 import ChoiceList from "./ChoiceList.vue";
 import HistoryList from "./HistoryList.vue";
@@ -8,29 +8,117 @@ import type { Choice, SpinRecord } from "./types";
 import {
   MIN_WEIGHT,
   PALETTE,
+  SPIN_DURATION_MS,
   clampWeight,
   formatTimeWithMs,
+  makeId,
   pickWinner,
   totalWeight,
 } from "./wheelEngine";
 
-const choices = ref<Choice[]>([
-  { id: crypto.randomUUID(), label: "Niets", weight: 0.5 },
-  { id: crypto.randomUUID(), label: "2 slokken", weight: 1 },
-  { id: crypto.randomUUID(), label: "1 Bak", weight: 1 },
-  { id: crypto.randomUUID(), label: "1 slok", weight: 0.5 },
-  { id: crypto.randomUUID(), label: "4 slokken", weight: 1 },
-]);
+const STORAGE_KEY = "radje-draaien:v1";
+const SPIN_FALLBACK_MS = SPIN_DURATION_MS + 300;
 
-const spinHistory = ref<SpinRecord[]>([]);
+function makeDefaultChoices(): Choice[] {
+  return [
+    { id: makeId(), label: "Niets", weight: 0.5 },
+    { id: makeId(), label: "2 slokken", weight: 1 },
+    { id: makeId(), label: "1 Bak", weight: 1 },
+    { id: makeId(), label: "1 slok", weight: 0.5 },
+    { id: makeId(), label: "4 slokken", weight: 1 },
+  ];
+}
+
+function loadChoices(): Choice[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return makeDefaultChoices();
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.choices) || !parsed.choices.length) {
+      return makeDefaultChoices();
+    }
+    return parsed.choices
+      .filter(
+        (item: unknown) =>
+          typeof (item as Choice).label === "string" &&
+          Number.isFinite((item as Choice).weight),
+      )
+      .map((item: Choice) => ({
+        id: String(item.id),
+        label: String(item.label),
+        weight: clampWeight(item.weight, 0),
+      }));
+  } catch {
+    return makeDefaultChoices();
+  }
+}
+
+function loadHistory(): SpinRecord[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.history)) {
+      return [];
+    }
+    return parsed.history.slice(0, 10);
+  } catch {
+    return [];
+  }
+}
+
+const choices = ref<Choice[]>(loadChoices());
+const spinHistory = ref<SpinRecord[]>(loadHistory());
 const currentRotation = ref(0);
 const isSpinning = ref(false);
 const pendingWinner = ref<string | null>(null);
 const resultText = ref("");
+let lastActiveLabel = "";
+let spinFallbackTimer: number | null = null;
+
+function saveState() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ choices: choices.value, history: spinHistory.value }),
+    );
+  } catch {
+    // storage may be unavailable (private mode, quota) — ignore
+  }
+}
+
+watch([choices, spinHistory], saveState, { deep: true });
+
+function resetGame() {
+  if (isSpinning.value) {
+    return;
+  }
+  choices.value = makeDefaultChoices();
+  spinHistory.value = [];
+  resultText.value = "";
+  lastActiveLabel = "";
+}
+
+function clearHistory() {
+  if (isSpinning.value) {
+    return;
+  }
+  spinHistory.value = [];
+}
+
+onBeforeUnmount(() => {
+  if (spinFallbackTimer !== null) {
+    window.clearTimeout(spinFallbackTimer);
+  }
+});
 
 function addChoice(payload: { label: string; weight: number }) {
   choices.value.push({
-    id: crypto.randomUUID(),
+    id: makeId(),
     label: payload.label,
     weight: clampWeight(payload.weight),
   });
@@ -46,7 +134,7 @@ function updateLabel(id: string, label: string) {
 function updateWeight(id: string, weight: number) {
   const found = choices.value.find((item) => item.id === id);
   if (found) {
-    found.weight = clampWeight(weight);
+    found.weight = clampWeight(weight, 0);
   }
 }
 
@@ -90,17 +178,33 @@ function spin() {
   pendingWinner.value = choices.value[winnerIndex].label;
   isSpinning.value = true;
   resultText.value = "";
+  lastActiveLabel = "";
+
+  if (spinFallbackTimer !== null) {
+    window.clearTimeout(spinFallbackTimer);
+  }
+  spinFallbackTimer = window.setTimeout(() => {
+    spinFallbackTimer = null;
+    onSpinEnd();
+  }, SPIN_FALLBACK_MS);
 }
 
 function onActiveOption(label: string) {
-  if (isSpinning.value) {
-    resultText.value = label;
+  if (!isSpinning.value || label === lastActiveLabel) {
+    return;
   }
+  lastActiveLabel = label;
+  resultText.value = label;
 }
 
 function onSpinEnd() {
   if (!isSpinning.value || !pendingWinner.value) {
     return;
+  }
+
+  if (spinFallbackTimer !== null) {
+    window.clearTimeout(spinFallbackTimer);
+    spinFallbackTimer = null;
   }
 
   isSpinning.value = false;
@@ -118,11 +222,13 @@ function onSpinEnd() {
 
 <template>
   <main>
-    <section class="panel hero">
-      <h1>Radje draaien</h1>
+    <section class="hero" aria-labelledby="page-title">
+      <div class="eyebrow">Dispuut Ebrius Vespertina</div>
+      <h1 id="page-title">Radje draaien</h1>
       <p>
         Voeg keuzes toe, geef eventueel een gewicht mee, en draai het rad.
-        Gewichten worden automatisch omgerekend naar 100% (360°).
+        Gewichten worden automatisch omgerekend naar 100% (360°). Zet een
+        gewicht op 0 om de keuze te bewaren maar over te slaan bij het draaien.
       </p>
     </section>
 
@@ -140,11 +246,21 @@ function onSpinEnd() {
     </section>
 
     <section class="panel controls" aria-label="Instellingen">
+      <div class="panel-header">
+        <h2 id="controls-title">Keuzes</h2>
+        <button
+          class="btn-ghost"
+          type="button"
+          :disabled="isSpinning"
+          @click="resetGame"
+        >
+          Reset naar standaard
+        </button>
+      </div>
       <ChoiceForm :min-weight="MIN_WEIGHT" @add-choice="addChoice" />
       <ChoiceList
         :choices="choices"
         :palette="PALETTE"
-        :min-weight="MIN_WEIGHT"
         @update-label="updateLabel"
         @update-weight="updateWeight"
         @remove-choice="removeChoice"
@@ -152,7 +268,17 @@ function onSpinEnd() {
     </section>
 
     <section class="panel" aria-label="Geschiedenis">
-      <h2>Geschiedenis</h2>
+      <div class="panel-header">
+        <h2>Geschiedenis</h2>
+        <button
+          class="btn-ghost"
+          type="button"
+          :disabled="isSpinning || spinHistory.length === 0"
+          @click="clearHistory"
+        >
+          Wis
+        </button>
+      </div>
       <HistoryList :history="spinHistory" />
     </section>
   </main>
@@ -161,30 +287,70 @@ function onSpinEnd() {
 <style scoped>
 main {
   width: min(100%, 58rem);
-  max-width: 58rem;
   margin: 0 auto;
   padding: 1rem;
   display: grid;
   gap: 1rem;
+  align-content: start;
 }
 
-.panel {
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 1rem;
-  padding: 1rem;
-  min-width: 0;
+.hero {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0.1rem 0.25rem;
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fb7185;
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(1.5rem, 7vw, 2rem);
+  font-size: clamp(2.1rem, 6vw, 3.2rem);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+  color: #f8fafc;
 }
 
-p {
-  margin: 0.55rem 0 0;
-  color: #cbd5e1;
-  font-size: 0.95rem;
+.hero p {
+  margin: 0;
+  max-width: 42rem;
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: #94a3b8;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.75));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  padding: 1rem;
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+
+.controls {
+  display: grid;
+  gap: 0.7rem;
 }
 
 .wheel-wrap {
@@ -202,20 +368,40 @@ p {
   min-height: 1.4rem;
 }
 
-.controls {
-  display: grid;
-  gap: 0.7rem;
+.btn-ghost {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.5);
+  color: #cbd5e1;
+  border-radius: 0.6rem;
+  padding: 0.45rem 0.75rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
-h2 {
-  margin: 0 0 0.6rem;
-  font-size: 1rem;
+.btn-ghost:hover:not(:disabled) {
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 @media (min-width: 56rem) {
   main {
     grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
     align-items: start;
+    padding: 1.5rem;
+    gap: 1.25rem;
   }
 
   .hero {
