@@ -2,6 +2,8 @@
 dist/
 # generated types
 .astro/
+# PWA dev service worker
+dev-dist/
 
 # dependencies
 node_modules/
