@@ -1,3 +1,10 @@
+export interface CounterEvent {
+  /** ISO timestamp of when the change happened. */
+  at: string;
+  /** Applied change to the value (negative for "af"). Never 0. */
+  delta: number;
+}
+
 export interface Counter {
   id: string;
   name: string;
@@ -9,6 +16,10 @@ export interface Counter {
   categoryId: string | null;
   /** ms timestamp, used for stable insertion order. */
   createdAt: number;
+  /** Whether +/- changes are recorded with timestamps for statistics. */
+  trackHistory: boolean;
+  /** Timestamped changes, oldest first, capped at MAX_HISTORY. */
+  history: CounterEvent[];
 }
 
 export interface Category {

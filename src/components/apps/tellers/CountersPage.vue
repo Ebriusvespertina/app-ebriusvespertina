@@ -4,12 +4,14 @@ import CounterCard from "./CounterCard.vue";
 import CounterForm from "./CounterForm.vue";
 import CategoryForm from "./CategoryForm.vue";
 import ConfirmModal from "./ConfirmModal.vue";
+import StatsModal from "./StatsModal.vue";
 import type { Category, Counter, CountersState } from "./types";
 import {
   STORAGE_KEY,
   addCategory,
   addCounter,
   categoryGroups,
+  clearHistory,
   createCategory,
   createCounter,
   emptyState,
@@ -75,6 +77,13 @@ function showHint(text: string) {
 /** null = closed, "new" = create, Counter = edit. */
 const counterForm = ref<Counter | "new" | null>(null);
 const categoryForm = ref<Category | "new" | null>(null);
+const statsId = ref<string | null>(null);
+
+const statsCounter = computed(() =>
+  statsId.value === null
+    ? null
+    : (state.value.counters.find((counter) => counter.id === statsId.value) ?? null),
+);
 
 interface ConfirmRequest {
   title: string;
@@ -97,7 +106,13 @@ function openConfirm(request: Omit<ConfirmRequest, "confirmLabel" | "danger"> & 
   };
 }
 
-function onSaveCounter(payload: { name: string; icon: string; value: number; categoryId: string | null }) {
+function onSaveCounter(payload: {
+  name: string;
+  icon: string;
+  value: number;
+  categoryId: string | null;
+  trackHistory: boolean;
+}) {
   if (counterForm.value === "new") {
     state.value = addCounter(state.value, createCounter(payload.name, payload));
     showHint("Teller toegevoegd.");
@@ -151,6 +166,20 @@ function onDeleteCategory(id: string) {
 
 function onCount(id: string, delta: number) {
   state.value = incrementCounter(state.value, id, delta);
+}
+
+function onClearHistory(id: string) {
+  const counter = state.value.counters.find((c) => c.id === id);
+  openConfirm({
+    title: "Geschiedenis wissen",
+    message: `Weet je zeker dat je alle tijdstippen van "${counter?.name ?? "deze teller"}" wilt wissen? De huidige waarde blijft staan.`,
+    confirmLabel: "Wissen",
+    danger: true,
+    onConfirm: () => {
+      state.value = clearHistory(state.value, id);
+      showHint("Geschiedenis gewist.");
+    },
+  });
 }
 
 function exportBackup() {
@@ -292,6 +321,7 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
             :counter="counter"
             @count="onCount(counter.id, $event)"
             @edit="counterForm = counter"
+            @stats="statsId = counter.id"
           />
         </div>
       </section>
@@ -308,6 +338,7 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
             :counter="counter"
             @count="onCount(counter.id, $event)"
             @edit="counterForm = counter"
+            @stats="statsId = counter.id"
           />
         </div>
       </section>
@@ -336,6 +367,13 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
       @save="onSaveCategory"
       @delete="onDeleteCategory"
       @close="categoryForm = null"
+    />
+
+    <StatsModal
+      v-if="statsCounter"
+      :counter="statsCounter"
+      @clear-history="onClearHistory(statsCounter.id)"
+      @close="statsId = null"
     />
 
     <ConfirmModal

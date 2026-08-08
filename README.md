@@ -10,7 +10,7 @@ Een statische PWA gebouwd met [Astro](https://astro.build) en [Vue 3](https://vu
 | Dobbelstenen | `/apps/dobbelstenen` | Dertigen: gooi 6 stenen, vergrendel wat je wilt houden, doel boven de 30. |
 | Radje draaien | `/apps/radje-draaien` | Keuzes met gewichten op een rad, met geschiedenis (opgeslagen per toestel). |
 | Bakken Timer | `/apps/bakken-timer` | Houd vast om te starten, laat los zodra je drinkt, tik weer als de bak leeg is. Record en log per toestel. |
-| Tellers | `/apps/tellers` | Meerdere tellers in categorieën, tellen met tikken of vasthouden, backup via import/export (JSON). |
+| Tellers | `/apps/tellers` | Meerdere tellers in categorieën, tellen met tikken of vasthouden, statistieken en grafieken per teller, backup via import/export (JSON). |
 
 ## Structuur
 

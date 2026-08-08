@@ -1,4 +1,4 @@
-import type { BackupFile, Category, Counter, CountersState } from "./types";
+import type { BackupFile, Category, Counter, CounterEvent, CountersState } from "./types";
 
 export const STORAGE_KEY = "counters:v1";
 export const MIN_VALUE = 0;
@@ -7,6 +7,10 @@ export const MAX_VALUE = 999_999;
 export const MAX_COUNTERS = 500;
 export const MAX_CATEGORIES = 200;
 export const MAX_NAME_LENGTH = 60;
+/** Per-counter cap on recorded events; the oldest are dropped first. */
+export const MAX_HISTORY = 2000;
+/** Spans longer than this switch the chart from hourly to daily buckets. */
+export const DAY_MS = 86_400_000;
 
 export function makeId() {
   if (globalThis.crypto?.randomUUID) {
@@ -24,7 +28,7 @@ export function clampValue(value: number) {
 
 export function createCounter(
   name: string,
-  options: { icon?: string; categoryId?: string | null; value?: number } = {},
+  options: { icon?: string; categoryId?: string | null; value?: number; trackHistory?: boolean } = {},
 ): Counter {
   return {
     id: makeId(),
@@ -33,6 +37,8 @@ export function createCounter(
     icon: (options.icon ?? "").slice(0, 16),
     categoryId: options.categoryId ?? null,
     createdAt: Date.now(),
+    trackHistory: options.trackHistory ?? true,
+    history: [],
   };
 }
 
@@ -59,7 +65,7 @@ export function addCategory(state: CountersState, category: Category): CountersS
 export function updateCounter(
   state: CountersState,
   id: string,
-  patch: Partial<Pick<Counter, "name" | "value" | "icon" | "categoryId">>,
+  patch: Partial<Pick<Counter, "name" | "value" | "icon" | "categoryId" | "trackHistory">>,
 ): CountersState {
   return {
     ...state,
@@ -67,14 +73,22 @@ export function updateCounter(
       if (counter.id !== id) {
         return counter;
       }
-      return {
+      const trackHistory = patch.trackHistory ?? counter.trackHistory;
+      const value = patch.value !== undefined ? clampValue(patch.value) : counter.value;
+      const applied = value - counter.value;
+      let next: Counter = {
         ...counter,
         ...patch,
         name: patch.name !== undefined ? patch.name.slice(0, MAX_NAME_LENGTH) : counter.name,
-        value: patch.value !== undefined ? clampValue(patch.value) : counter.value,
+        value,
+        trackHistory,
         icon: patch.icon !== undefined ? patch.icon.slice(0, 16) : counter.icon,
         categoryId: patch.categoryId !== undefined ? patch.categoryId : counter.categoryId,
       };
+      if (applied !== 0) {
+        next = appendEvent(next, applied);
+      }
+      return next;
     }),
   };
 }
@@ -82,8 +96,35 @@ export function updateCounter(
 export function incrementCounter(state: CountersState, id: string, delta: number): CountersState {
   return {
     ...state,
+    counters: state.counters.map((counter) => {
+      if (counter.id !== id) {
+        return counter;
+      }
+      const value = clampValue(counter.value + delta);
+      const applied = value - counter.value;
+      const next: Counter = { ...counter, value };
+      return applied !== 0 ? appendEvent(next, applied) : next;
+    }),
+  };
+}
+
+function appendEvent(counter: Counter, delta: number): Counter {
+  if (!counter.trackHistory) {
+    return counter;
+  }
+  const event: CounterEvent = { at: new Date().toISOString(), delta };
+  const history = [...counter.history, event];
+  if (history.length > MAX_HISTORY) {
+    history.splice(0, history.length - MAX_HISTORY);
+  }
+  return { ...counter, history };
+}
+
+export function clearHistory(state: CountersState, id: string): CountersState {
+  return {
+    ...state,
     counters: state.counters.map((counter) =>
-      counter.id === id ? { ...counter, value: clampValue(counter.value + delta) } : counter,
+      counter.id === id ? { ...counter, history: [] } : counter,
     ),
   };
 }
@@ -148,6 +189,111 @@ export function categoryGroups(state: CountersState): CategoryGroup[] {
 
 export function totals(state: CountersState) {
   return state.counters.reduce((sum, counter) => sum + counter.value, 0);
+}
+
+function bucketKey(date: Date, mode: "day" | "hour") {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  if (mode === "day") {
+    return `${y}-${m}-${d}`;
+  }
+  return `${y}-${m}-${d}T${String(date.getHours()).padStart(2, "0")}`;
+}
+
+export interface CounterStats {
+  /** Sum of all positive deltas. */
+  totalPlus: number;
+  /** Sum of all negative deltas (<= 0). */
+  totalMinus: number;
+  /** totalPlus + totalMinus. */
+  net: number;
+  eventCount: number;
+  firstAt: string | null;
+  lastAt: string | null;
+  /** Local day with the most events, "YYYY-MM-DD". */
+  busiestDayKey: string | null;
+  /** Local hour with the most events, "YYYY-MM-DDTHH". */
+  busiestHourKey: string | null;
+}
+
+export function counterStats(counter: Counter): CounterStats {
+  let totalPlus = 0;
+  let totalMinus = 0;
+  const dayCounts = new Map<string, number>();
+  const hourCounts = new Map<string, number>();
+  for (const event of counter.history) {
+    if (event.delta > 0) {
+      totalPlus += event.delta;
+    } else {
+      totalMinus += event.delta;
+    }
+    const date = new Date(event.at);
+    dayCounts.set(bucketKey(date, "day"), (dayCounts.get(bucketKey(date, "day")) ?? 0) + 1);
+    hourCounts.set(bucketKey(date, "hour"), (hourCounts.get(bucketKey(date, "hour")) ?? 0) + 1);
+  }
+  return {
+    totalPlus,
+    totalMinus,
+    net: totalPlus + totalMinus,
+    eventCount: counter.history.length,
+    firstAt: counter.history[0]?.at ?? null,
+    lastAt: counter.history[counter.history.length - 1]?.at ?? null,
+    busiestDayKey: maxKey(dayCounts),
+    busiestHourKey: maxKey(hourCounts),
+  };
+}
+
+function maxKey(counts: Map<string, number>): string | null {
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [key, count] of counts) {
+    if (count > bestCount) {
+      best = key;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+export interface HistoryPoint {
+  /** Bucket key: "YYYY-MM-DD" (daily) or "YYYY-MM-DDTHH" (hourly). */
+  key: string;
+  /** Counter value at the end of this bucket. */
+  cumulative: number;
+}
+
+export interface HistorySeries {
+  /** Value at the first retained event; points build on this. */
+  anchor: number;
+  points: HistoryPoint[];
+}
+
+/**
+ * Bucket the recorded events for charting. Long spans (> 3 days) are bucketed
+ * per day, shorter ones per hour. Buckets are chronological and cumulative.
+ */
+export function historySeries(counter: Counter): HistorySeries {
+  if (counter.history.length === 0) {
+    return { anchor: counter.value, points: [] };
+  }
+  const first = new Date(counter.history[0].at).getTime();
+  const last = new Date(counter.history[counter.history.length - 1].at).getTime();
+  const mode: "day" | "hour" = last - first > DAY_MS * 3 ? "day" : "hour";
+  const deltas = new Map<string, number>();
+  for (const event of counter.history) {
+    const key = bucketKey(new Date(event.at), mode);
+    deltas.set(key, (deltas.get(key) ?? 0) + event.delta);
+  }
+  const total = counter.history.reduce((sum, event) => sum + event.delta, 0);
+  const anchor = counter.value - total;
+  const points: HistoryPoint[] = [];
+  let cumulative = anchor;
+  for (const [key, delta] of deltas) {
+    cumulative += delta;
+    points.push({ key, cumulative });
+  }
+  return { anchor, points };
 }
 
 export function exportFilename(now: Date = new Date()) {
@@ -219,6 +365,25 @@ export function parseState(json: string): CountersState | null {
       continue;
     }
     const categoryId = typeof record.categoryId === "string" ? record.categoryId : null;
+    const history: CounterEvent[] = [];
+    if (Array.isArray(record.history)) {
+      for (const entry of record.history) {
+        if (typeof entry !== "object" || entry === null) {
+          continue;
+        }
+        const event = entry as Record<string, unknown>;
+        const at = typeof event.at === "string" ? event.at : "";
+        const delta = typeof event.delta === "number" ? event.delta : NaN;
+        if (!at || !Number.isFinite(delta) || delta === 0 || !Number.isFinite(Date.parse(at))) {
+          continue;
+        }
+        history.push({ at, delta });
+      }
+      history.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+      if (history.length > MAX_HISTORY) {
+        history.splice(0, history.length - MAX_HISTORY);
+      }
+    }
     const counter: Counter = {
       id: typeof record.id === "string" && record.id && !usedIds.has(record.id) ? record.id : makeId(),
       name: name.slice(0, MAX_NAME_LENGTH),
@@ -226,6 +391,8 @@ export function parseState(json: string): CountersState | null {
       icon: typeof record.icon === "string" ? record.icon.slice(0, 16) : "",
       categoryId: categoryId !== null && categoryIds.has(categoryId) ? categoryId : null,
       createdAt: Number.isFinite(record.createdAt) ? (record.createdAt as number) : Date.now(),
+      trackHistory: record.trackHistory === true,
+      history,
     };
     usedIds.add(counter.id);
     state.counters.push(counter);

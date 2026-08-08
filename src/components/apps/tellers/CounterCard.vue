@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   count: [delta: number];
   edit: [];
+  stats: [];
 }>();
 
 let holdTimer: number | null = null;
@@ -76,6 +77,24 @@ const displayValue = () => props.counter.value.toLocaleString("nl-NL");
     <header class="topline">
       <span class="icon" aria-hidden="true">{{ counter.icon || "🔢" }}</span>
       <h3 class="name">{{ counter.name }}</h3>
+      <button
+        v-if="counter.trackHistory && counter.history.length > 0"
+        class="icon-btn"
+        type="button"
+        :aria-label="`${counter.name} statistieken`"
+        @click="emit('stats')"
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 3v18h18M7 15l4-6 3 3 5-7"
+          />
+        </svg>
+      </button>
       <button
         class="edit"
         type="button"
@@ -170,6 +189,7 @@ const displayValue = () => props.counter.value.toLocaleString("nl-NL");
   color: #f8fafc;
 }
 
+.icon-btn,
 .edit {
   appearance: none;
   border: none;
@@ -181,6 +201,7 @@ const displayValue = () => props.counter.value.toLocaleString("nl-NL");
   flex: none;
 }
 
+.icon-btn:hover,
 .edit:hover {
   color: #f8fafc;
   background: rgba(148, 163, 184, 0.12);

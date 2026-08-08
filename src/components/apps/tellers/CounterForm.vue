@@ -17,7 +17,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  save: [payload: { name: string; icon: string; value: number; categoryId: string | null }];
+  save: [payload: {
+    name: string;
+    icon: string;
+    value: number;
+    categoryId: string | null;
+    trackHistory: boolean;
+  }];
   delete: [id: string];
   close: [];
 }>();
@@ -27,6 +33,7 @@ const form = reactive({
   icon: props.counter?.icon ?? "",
   value: props.counter?.value ?? 0,
   categoryId: props.counter?.categoryId ?? null,
+  trackHistory: props.counter?.trackHistory ?? true,
 });
 
 const valueText = ref(String(props.counter?.value ?? 0));
@@ -64,6 +71,7 @@ function submit() {
     icon: form.icon,
     value,
     categoryId: form.categoryId,
+    trackHistory: form.trackHistory,
   });
 }
 </script>
@@ -119,6 +127,14 @@ function submit() {
             {{ category.name }}
           </option>
         </select>
+      </label>
+
+      <label class="field toggle">
+        <span class="toggle-text">
+          <strong>Geschiedenis bijhouden</strong>
+          <small>Bewaar tijdstippen van + en − om statistieken en een grafiek te tonen.</small>
+        </span>
+        <input v-model="form.trackHistory" type="checkbox" />
       </label>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -223,6 +239,41 @@ select option {
 .emoticon.active {
   border-color: #38bdf8;
   background: rgba(56, 189, 248, 0.16);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.toggle-text {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.toggle-text strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.toggle-text small {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #94a3b8;
+}
+
+.toggle input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #38bdf8;
+  flex: none;
 }
 
 .error {
