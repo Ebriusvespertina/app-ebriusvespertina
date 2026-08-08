@@ -24,6 +24,14 @@ export const apps: AppItem[] = [
     icon: "lucide:dice-5",
     accent: "#10b981",
   },
+  {
+    name: "Tellers",
+    description: "Houd alles bij: biertjes, shotjes, push-ups of kilometers.",
+    maker: "Jaspe",
+    href: "/apps/tellers",
+    icon: "lucide:tally-5",
+    accent: "#38bdf8",
+  },
   // {
   //   name: "Paardenracen",
   //   description: "Wie gokt op het snelste paard?",

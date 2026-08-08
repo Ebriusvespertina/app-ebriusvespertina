@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CountersPage from '../../components/apps/tellers/CountersPage.vue';
+---
+
+<BaseLayout
+	title="Tellers"
+	description="Houd alles bij: biertjes, shotjes, push-ups of kilometers. Meerdere tellers, categorieën en backup via import/export."
+	appleTitle="Tellers"
+	background="radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 30%), radial-gradient(circle at 85% 0%, rgba(16, 185, 129, 0.1), transparent 26%), linear-gradient(180deg, #0f172a 0%, #020617 100%)"
+>
+	<CountersPage client:only="vue" />
+</BaseLayout>
