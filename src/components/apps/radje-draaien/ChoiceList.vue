@@ -7,6 +7,7 @@ import { percentages, clampWeight, totalWeight } from "./wheelEngine";
 const props = defineProps<{
   choices: Choice[];
   palette: string[];
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -50,6 +51,7 @@ function onWeightInput(id: string, value: string) {
       <input
         class="item-input label-input"
         :value="choice.label"
+        :disabled="disabled"
         title="Maak leeg om te verwijderen"
         @input="
           onLabelInput(choice.id, ($event.target as HTMLInputElement).value)
@@ -60,6 +62,7 @@ function onWeightInput(id: string, value: string) {
         class="item-input weight-input"
         type="number"
         min="0"
+        :disabled="disabled"
         step="0.1"
         inputmode="decimal"
         :value="String(choice.weight)"
@@ -72,6 +75,7 @@ function onWeightInput(id: string, value: string) {
       <button
         class="remove"
         type="button"
+        :disabled="disabled"
         :aria-label="`Verwijder ${choice.label}`"
         title="Verwijder"
         @click="emit('removeChoice', choice.id)"

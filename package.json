@@ -1,5 +1,5 @@
 {
-  "name": "",
+  "name": "dispuut-apps",
   "type": "module",
   "version": "0.0.1",
   "engines": {
@@ -20,13 +20,6 @@
     "astro": "^6.0.5",
     "astro-icon": "^1.1.5",
     "vue": "^3.5.30"
-  },
-  "pnpm": {
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "astro": "6"
-      }
-    }
   },
   "devDependencies": {
     "sharp": "^0.35.3",

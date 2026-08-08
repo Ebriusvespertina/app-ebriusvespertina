@@ -2,10 +2,11 @@
 import { computed, ref } from "vue";
 import Die from "./Die.vue";
 import MiniDie from "./MiniDie.vue";
-import { lockedTotal, rollDieValue } from "./diceEngine";
+import { lockedCount, lockedTotal, rollDieValue } from "./diceEngine";
 import type { Die as DieModel, DieValue, RollLogEntry } from "./types";
 
 const ROLL_DURATION_MS = 380;
+const ROLL_LOG_LIMIT = 50;
 const DICE_COUNT = 6;
 
 const lockByValue = ref(true);
@@ -29,12 +30,16 @@ const allTotal = computed(() => dice.value.reduce((sum, die) => sum + die.value,
 const totalValue = computed(() => lockedTotal(dice.value));
 
 const rollLog = ref<RollLogEntry[]>([]);
+const rollCounter = ref(0);
 
-const hintText = computed(() =>
-  lockByValue.value
+const hintText = computed(() => {
+  if (lockedCount(dice.value) === DICE_COUNT) {
+    return "Alle stenen zijn vergrendeld — reset voor een nieuwe ronde.";
+  }
+  return lockByValue.value
     ? "Tik om alle gelijke ogen samen te vergrendelen"
-    : "Tik om één dobbelsteen te vergrendelen",
-);
+    : "Tik om één dobbelsteen te vergrendelen";
+});
 
 function snapshotLog(): RollLogEntry["dice"] {
   return dice.value.map((die) => ({ value: die.value, locked: die.locked }));
@@ -89,8 +94,12 @@ function rollDice() {
     return;
   }
 
-  isRolling.value = true;
   const unlocked = dice.value.filter((die) => !die.locked);
+  if (!unlocked.length) {
+    return;
+  }
+
+  isRolling.value = true;
   const nextValues = new Map<number, DieModel["value"]>();
 
   for (const die of unlocked) {
@@ -105,10 +114,14 @@ function rollDice() {
       }
     }
 
+    rollCounter.value += 1;
     rollLog.value.push({
-      roll: rollLog.value.length + 1,
+      roll: rollCounter.value,
       dice: snapshotLog(),
     });
+    if (rollLog.value.length > ROLL_LOG_LIMIT) {
+      rollLog.value = rollLog.value.slice(-ROLL_LOG_LIMIT);
+    }
 
     rollingIds.value = new Set();
     isRolling.value = false;
@@ -122,6 +135,7 @@ function clearLocks() {
   }
 
   rollLog.value = [];
+  rollCounter.value = 0;
 }
 </script>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BakButton from "./BakButton.vue";
 import BakLog from "./BakLog.vue";
 import EdgeProgress from "./EdgeProgress.vue";
@@ -169,6 +169,17 @@ function clearPendingArm() {
   }
 }
 
+function onVisibilityChange() {
+  if (document.visibilityState !== "visible" || phase.value !== "running") {
+    return;
+  }
+  // rAF pauses while the tab is hidden, so the display may lag behind the
+  // wall clock. Sync it and re-arm the wake lock in case the screen slept
+  // and released it mid-run.
+  elapsedMs.value = Math.floor(performance.now() - runStart);
+  acquireWakeLock();
+}
+
 function onTouchDown() {
   if (phase.value === "running") {
     if (performance.now() - runStart < MIN_RUN_MS) {
@@ -315,7 +326,12 @@ function clearLog() {
   log.value = [];
 }
 
+onMounted(() => {
+  document.addEventListener("visibilitychange", onVisibilityChange);
+});
+
 onBeforeUnmount(() => {
+  document.removeEventListener("visibilitychange", onVisibilityChange);
   stopTicker();
   releaseWakeLock();
   clearPendingArm();

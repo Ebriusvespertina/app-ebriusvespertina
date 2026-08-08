@@ -5,6 +5,7 @@ import { Icon } from "@iconify/vue";
 
 const props = defineProps<{
   minWeight: number;
+  disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -32,6 +33,7 @@ function submit() {
     <input
       v-model="newLabel"
       class="new-label"
+      :disabled="disabled"
       placeholder="Nieuwe keuze"
       autocomplete="off"
       enterkeyhint="done"
@@ -42,6 +44,7 @@ function submit() {
       v-model="newWeight"
       class="new-weight"
       type="number"
+      :disabled="disabled"
       :min="String(minWeight)"
       step="0.1"
       inputmode="decimal"
@@ -50,6 +53,7 @@ function submit() {
     <button
       class="add"
       type="submit"
+      :disabled="disabled"
       aria-label="Keuze toevoegen"
       title="Keuze toevoegen"
     >

@@ -117,6 +117,9 @@ onBeforeUnmount(() => {
 });
 
 function addChoice(payload: { label: string; weight: number }) {
+  if (isSpinning.value) {
+    return;
+  }
   choices.value.push({
     id: makeId(),
     label: payload.label,
@@ -125,6 +128,9 @@ function addChoice(payload: { label: string; weight: number }) {
 }
 
 function updateLabel(id: string, label: string) {
+  if (isSpinning.value) {
+    return;
+  }
   const found = choices.value.find((item) => item.id === id);
   if (found) {
     found.label = label;
@@ -132,6 +138,9 @@ function updateLabel(id: string, label: string) {
 }
 
 function updateWeight(id: string, weight: number) {
+  if (isSpinning.value) {
+    return;
+  }
   const found = choices.value.find((item) => item.id === id);
   if (found) {
     found.weight = clampWeight(weight, 0);
@@ -139,6 +148,9 @@ function updateWeight(id: string, weight: number) {
 }
 
 function removeChoice(id: string) {
+  if (isSpinning.value) {
+    return;
+  }
   choices.value = choices.value.filter((item) => item.id !== id);
 }
 
@@ -257,10 +269,11 @@ function onSpinEnd() {
           Reset naar standaard
         </button>
       </div>
-      <ChoiceForm :min-weight="MIN_WEIGHT" @add-choice="addChoice" />
+      <ChoiceForm :min-weight="MIN_WEIGHT" :disabled="isSpinning" @add-choice="addChoice" />
       <ChoiceList
         :choices="choices"
         :palette="PALETTE"
+        :disabled="isSpinning"
         @update-label="updateLabel"
         @update-weight="updateWeight"
         @remove-choice="removeChoice"
