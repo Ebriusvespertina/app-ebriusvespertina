@@ -1,0 +1,65 @@
+---
+import PwaRegister from '../components/PwaRegister.astro';
+
+export interface Props {
+	title: string;
+	description?: string;
+	appleTitle?: string;
+	lang?: string;
+	/** Full CSS `background` shorthand for the body (multi-layer gradients allowed). */
+	background?: string;
+}
+
+const {
+	title,
+	description,
+	appleTitle = title,
+	lang = 'nl',
+	background = 'linear-gradient(180deg, #0f172a 0%, #020617 100%)',
+} = Astro.props;
+---
+
+<html lang={lang}>
+	<head>
+		<meta charset="utf-8" />
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#0f172a" />
+		{description && <meta name="description" content={description} />}
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content={appleTitle} />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title}</title>
+		<style is:global>
+			@import '../styles/tokens.css';
+
+			:root {
+				color-scheme: dark;
+				font-family: var(--font-family-base);
+				-webkit-tap-highlight-color: transparent;
+			}
+
+			body {
+				margin: 0;
+				min-height: 100dvh;
+				color: #e2e8f0;
+				touch-action: manipulation;
+				-webkit-font-smoothing: antialiased;
+				text-rendering: optimizeLegibility;
+				padding:
+					env(safe-area-inset-top, 0)
+					env(safe-area-inset-right, 0)
+					env(safe-area-inset-bottom, 0)
+					env(safe-area-inset-left, 0);
+			}
+		</style>
+	</head>
+	<body style={`background: ${background}`}>
+		<slot />
+		<PwaRegister />
+	</body>
+</html>

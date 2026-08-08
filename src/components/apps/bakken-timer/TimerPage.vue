@@ -399,14 +399,13 @@ onBeforeUnmount(() => {
 main {
   width: min(100%, 58rem);
   margin: 0 auto;
-  padding: calc(1rem + env(safe-area-inset-top, 0))
-    calc(1rem + env(safe-area-inset-right, 0))
-    calc(1rem + env(safe-area-inset-bottom, 0))
-    calc(1rem + env(safe-area-inset-left, 0));
+  padding: 1rem;
   display: grid;
   gap: 1rem;
   align-content: start;
   min-height: 100dvh;
+  user-select: none;
+  -webkit-user-select: none;
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;

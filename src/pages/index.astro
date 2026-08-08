@@ -1,78 +1,46 @@
 ---
+import BaseLayout from '../layouts/BaseLayout.astro';
 import AppGrid from '../components/AppGrid.astro';
 import AppHubHero from '../components/AppHubHero.astro';
-import PwaRegister from '../components/PwaRegister.astro';
 import { apps } from '../data/apps';
 ---
 
-<html lang="nl">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="manifest" href="/manifest.webmanifest" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#0f172a" />
-		<meta name="description" content="Een startpagina voor drankspellen en andere apps van Dispuut Ebrius Vespertina." />
-		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-		<meta name="apple-mobile-web-app-title" content="D.E.V. Apps" />
-		<meta name="generator" content={Astro.generator} />
-		<title>D.E.V. Apps</title>
-		<style is:global>
-			@import '../styles/tokens.css';
+<BaseLayout
+	title="D.E.V. Apps"
+	description="Een startpagina voor drankspellen en andere apps van Dispuut Ebrius Vespertina."
+	appleTitle="D.E.V. Apps"
+	background="radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 30%), radial-gradient(circle at 85% 0%, rgba(16, 185, 129, 0.12), transparent 26%), linear-gradient(180deg, #0f172a 0%, #020617 100%)"
+>
+	<main>
+		<AppHubHero
+			badge="App.website"
+			title="Dispuut Apps"
+			description="Een startpagina voor drankspellen en andere apps van Dispuut Ebrius Vespertina."
+		/>
 
-			:root {
-				color-scheme: dark;
-				font-family: var(--font-family-base);
-				background: var(--color-slate-950);
-			}
+		<AppGrid
+			apps={apps}
+			title="Beschikbare apps"
+			subtitle="Wil je zelf een app? Maak die dan zelf!"
+		/>
+	</main>
+</BaseLayout>
 
-			body {
-				margin: 0;
-				min-height: 100dvh;
-				background:
-					radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 30%),
-					radial-gradient(circle at 85% 0%, rgba(16, 185, 129, 0.12), transparent 26%),
-					linear-gradient(180deg, #0f172a 0%, #020617 100%);
-				color: #e2e8f0;
-				-webkit-font-smoothing: antialiased;
-				text-rendering: optimizeLegibility;
-			}
+<style>
+	main {
+		max-width: 72rem;
+		margin: 0 auto;
+		padding: 1rem;
+		display: grid;
+		gap: 1rem;
+		align-content: start;
+		min-height: 100dvh;
+	}
 
-			main {
-				max-width: 72rem;
-				margin: 0 auto;
-				padding: 1rem;
-				display: grid;
-				gap: 1rem;
-				align-content: start;
-				min-height: 100dvh;
-			}
-
-			@media (min-width: 48rem) {
-				main {
-					padding: 1.5rem;
-					gap: 1.25rem;
-				}
-			}
-		</style>
-	</head>
-	<body>
-		<main>
-			<AppHubHero
-				badge="App.website"
-				title="Dispuut Apps"
-				description="Een startpagina voor drankspellen en andere apps van Dispuut Ebrius Vespertina."
-			/>
-
-			<AppGrid
-				apps={apps}
-				title="Beschikbare apps"
-				subtitle="Wil je zelf een app? Maak die dan zelf!"
-			/>
-		</main>
-		<PwaRegister />
-	</body>
-</html>
+	@media (min-width: 48rem) {
+		main {
+			padding: 1.5rem;
+			gap: 1.25rem;
+		}
+	}
+</style>

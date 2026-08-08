@@ -8,7 +8,6 @@ const src = path.join(root, "public", "logo-dev.svg");
 const out = path.join(root, "public", "icons");
 
 const background = "#0f172a";
-const base = 1024;
 
 async function renderLogo() {
   return sharp(src, { density: 300 })

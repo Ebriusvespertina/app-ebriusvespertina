@@ -5,7 +5,8 @@
     "**/*"
   ],
   "exclude": [
-    "dist"
+    "dist",
+    "dev-dist"
   ],
   "compilerOptions": {
     "jsx": "preserve"

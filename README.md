@@ -1,43 +1,51 @@
-# Astro Starter Kit: Minimal
+# D.E.V. Apps
 
-```sh
-pnpm create astro@latest -- --template minimal
-```
+Een startpagina voor drankspellen en andere apps van Dispuut Ebrius Vespertina.
+Een statische PWA gebouwd met [Astro](https://astro.build) en [Vue 3](https://vuejs.org/), draait volledig in de browser en werkt offline na installatie.
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Apps
 
-## 🚀 Project Structure
+| App | Route | Omschrijving |
+| --- | --- | --- |
+| Dobbelstenen | `/apps/dobbelstenen` | Dertigen: gooi 6 stenen, vergrendel wat je wilt houden, doel boven de 30. |
+| Radje draaien | `/apps/radje-draaien` | Keuzes met gewichten op een rad, met geschiedenis (opgeslagen per toestel). |
+| Bakken Timer | `/apps/bakken-timer` | Houd vast om te starten, laat los zodra je drinkt, tik weer als de bak leeg is. Record en log per toestel. |
 
-Inside of your Astro project, you'll see the following folders and files:
+## Structuur
 
 ```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+src/
+├── pages/            # Astro-pagina's (elke app is één route)
+│   └── apps/
+├── layouts/
+│   └── BaseLayout.astro   # Gedeelde head/body, PWA-meta en SW-registratie
+├── components/
+│   ├── AppCard.astro, AppGrid.astro, AppHubHero.astro
+│   ├── PwaRegister.astro
+│   └── apps/<app-naam>/   # Per app: Vue-componenten + engine + types
+├── data/apps.ts      # Register: verschijnt op de startpagina
+└── styles/tokens.css # Design tokens (kleuren, spacing, radii)
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## Een app toevoegen
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+1. Maak `src/pages/apps/<naam>.astro` met `BaseLayout` en je Vue-app als `client:only="vue"`.
+2. Zet de componenten in `src/components/apps/<naam>/`; houd pure logica in een `<naam>Engine.ts` los van de Vue-componenten (die is unit-testbaar).
+3. Voeg een entry toe aan `src/data/apps.ts` (naam, beschrijving, maker, route, icoon, accentkleur).
+4. Schrijf tests voor de engine in `<naam>Engine.test.ts`.
 
-Any static assets, like images, can be placed in the `public/` directory.
+## Commands
 
-## 🧞 Commands
+| Commando | Actie |
+| --- | --- |
+| `pnpm dev` | Dev-server op `localhost:4321` (PWA werkt ook in dev) |
+| `pnpm build` | Productie-build naar `dist/` |
+| `pnpm preview` | Preview van de build |
+| `pnpm check` | Typecheck: `astro check` + `vue-tsc --noEmit` |
+| `pnpm test` | Unit-tests (vitest) voor de engines |
 
-All commands are run from the root of the project, from a terminal:
+Vereist Node >= 22 en pnpm 11 (zie `packageManager`). Bij een verse clone draait `pnpm install` de build-scripts van `esbuild` en `sharp` automatisch (geconfigureerd via `allowBuilds` in `pnpm-workspace.yaml`); volg niet de interactieve `pnpm approve-builds`-prompt.
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `pnpm install`             | Installs dependencies                            |
-| `pnpm dev`             | Starts local dev server at `localhost:4321`      |
-| `pnpm build`           | Build your production site to `./dist/`          |
-| `pnpm preview`         | Preview your build locally, before deploying     |
-| `pnpm astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `pnpm astro -- --help` | Get help using the Astro CLI                     |
+## PWA
 
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+De PWA wordt geregistreerd via `PwaRegister.astro` (in `BaseLayout`). Icoontjes in `public/icons/` kun je opnieuw genereren met `node scripts/generate-icons.mjs` (bron: `public/logo-dev.svg`). De manifest- en service-worker-config staat in `astro.config.mjs`.

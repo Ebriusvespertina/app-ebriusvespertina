@@ -3,4 +3,4 @@ allowBuilds:
   sharp: true
 peerDependencyRules:
   allowedVersions:
-    astro: 6
+    astro: "6"

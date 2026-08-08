@@ -1,42 +1,13 @@
 ---
+import BaseLayout from '../../layouts/BaseLayout.astro';
 import TimerPage from '../../components/apps/bakken-timer/TimerPage.vue';
-import PwaRegister from '../../components/PwaRegister.astro';
 ---
 
-<html lang="nl">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <meta name="theme-color" content="#0f172a" />
-    <meta name="description" content="Meet hoe snel jij een bak trekt: houd vast om te starten, laat los zodra je drinkt en tik weer als de bak leeg is." />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Bakken Timer" />
-    <title>Bakken Timer</title>
-    <style is:global>
-      @import '../../styles/tokens.css';
-
-      :root {
-        color-scheme: dark;
-        font-family: var(--font-family-base);
-        -webkit-tap-highlight-color: transparent;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100dvh;
-        background:
-          radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 30%),
-          radial-gradient(circle at 85% 0%, rgba(251, 191, 36, 0.1), transparent 26%),
-          linear-gradient(180deg, #0f172a 0%, #020617 100%);
-        color: #e2e8f0;
-      }
-    </style>
-  </head>
-  <body>
-    <TimerPage client:only="vue" />
-    <PwaRegister />
-  </body>
-</html>
+<BaseLayout
+	title="Bakken Timer"
+	description="Meet hoe snel jij een bak trekt: houd vast om te starten, laat los zodra je drinkt en tik weer als de bak leeg is."
+	appleTitle="Bakken Timer"
+	background="radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 30%), radial-gradient(circle at 85% 0%, rgba(251, 191, 36, 0.1), transparent 26%), linear-gradient(180deg, #0f172a 0%, #020617 100%)"
+>
+	<TimerPage client:only="vue" />
+</BaseLayout>
