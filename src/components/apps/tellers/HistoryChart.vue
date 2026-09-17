@@ -33,10 +33,25 @@ function y(v: number): number {
   return M.top + plotH - ((v - minValue.value) / span.value) * plotH;
 }
 
-/** 4 evenly spaced value ticks, including min and max. */
-const yTicks = computed(() =>
-  [0, 1, 2, 3].map((i) => minValue.value + (span.value * i) / 3),
-);
+/** Value ticks on round numbers (0/50/100…) rather than raw fractions of the
+    span, so the axis reads as a scale instead of arbitrary values. */
+const yTicks = computed(() => {
+  const lo = minValue.value;
+  const hi = Math.max(lo + 1, maxValue.value);
+  const raw = (hi - lo) / 3;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = Math.max(
+    1,
+    [1, 2, 5, 10]
+      .map((factor) => factor * magnitude)
+      .find((size) => (hi - lo) / size <= 5) ?? 10 * magnitude,
+  );
+  const ticks: number[] = [];
+  for (let value = Math.ceil(lo / step) * step; value <= hi; value += step) {
+    ticks.push(value);
+  }
+  return ticks.length ? ticks : [lo, hi];
+});
 
 const defaultYLabel = (v: number) => {
   if (Math.abs(v) >= 1000) {
@@ -177,11 +192,15 @@ function pointTitle(point: { startMs: number; value: number; events: number }): 
 <style scoped>
 .chart {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .plot {
   width: 100%;
-  height: 12rem;
+  /* Height follows the viewBox ratio: a fixed height transfers a ~606px
+     minimum width (12rem × 600/190) and blows up the panel on small screens. */
+  height: auto;
+  min-width: 0;
   display: block;
 }
 
@@ -192,9 +211,18 @@ function pointTitle(point: { startMs: number; value: number; events: number }): 
 
 .y-labels text,
 .x-labels text {
-  fill: #64748b;
-  font-size: 11px;
+  fill: #94a3b8;
+  font-size: 13px;
   font-weight: 600;
+}
+
+/* The svg scales with its width (viewBox 600), so label text becomes
+   unreadably small on phones. */
+@media (max-width: 30rem) {
+  .y-labels text,
+  .x-labels text {
+    font-size: 24px;
+  }
 }
 
 .x-labels text {
@@ -227,6 +255,6 @@ function pointTitle(point: { startMs: number; value: number; events: number }): 
   place-items: center;
   height: 12rem;
   font-size: 0.88rem;
-  color: #64748b;
+  color: #94a3b8;
 }
 </style>

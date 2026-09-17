@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from "vue";
 import ModalShell from "./ModalShell.vue";
 import type { Category, Counter } from "./types";
-import { MAX_VALUE, MIN_VALUE, RESET_PERIOD_LABELS } from "./countersEngine";
+import { MAX_VALUE, MIN_VALUE, RESET_PERIOD_LABELS, effectiveValue } from "./countersEngine";
 
 const EMOTICONS = [
   "🍺", "🍷", "🥃", "🍾", "🍸", "🍻",
@@ -31,16 +31,20 @@ const emit = defineEmits<{
 const form = reactive({
   name: props.counter?.name ?? "",
   icon: props.counter?.icon ?? "",
-  value: props.counter?.value ?? 0,
   categoryId: props.counter?.categoryId ?? null,
   resetPeriod: props.counter?.resetPeriod ?? "none",
 });
 
-const valueText = ref(String(props.counter?.value ?? 0));
+/* The field shows what the user sees: for a periodic counter that is this
+   period's value, not the lifetime total. */
+const valueText = ref(String(props.counter ? effectiveValue(props.counter) : 0));
 const error = ref("");
 
 const isEditing = computed(() => props.counter !== null && props.counter !== undefined);
 const title = computed(() => (isEditing.value ? "Teller bewerken" : "Nieuwe teller"));
+const valueLabel = computed(() =>
+  form.resetPeriod === "none" ? "Waarde" : "Waarde deze periode",
+);
 
 function pickEmoticon(emoticon: string) {
   form.icon = form.icon === emoticon ? "" : emoticon;
@@ -115,7 +119,7 @@ function submit() {
       </div>
 
       <label class="field">
-        <span>Waarde</span>
+        <span>{{ valueLabel }}</span>
         <input v-model="valueText" type="text" inputmode="numeric" />
       </label>
 
@@ -325,7 +329,7 @@ select option {
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.45;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .error {

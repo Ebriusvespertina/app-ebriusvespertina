@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import CounterCard from "./CounterCard.vue";
 import CounterDetail from "./CounterDetail.vue";
 import CounterForm from "./CounterForm.vue";
@@ -19,6 +19,7 @@ import {
   emptyState,
   exportFilename,
   incrementCounter,
+  lifetimeForDisplay,
   parseState,
   removeCategory,
   removeCounter,
@@ -80,10 +81,14 @@ const counterCount = computed(() => state.value.counters.length);
 
 const importInput = ref<HTMLInputElement | null>(null);
 const hint = ref("");
+const announcement = ref("");
 let hintTimer: number | null = null;
+let announceTimer: number | null = null;
+let countAnnouncement: string | null = null;
 
 function showHint(text: string) {
   hint.value = text;
+  announcement.value = text;
   if (hintTimer !== null) {
     window.clearTimeout(hintTimer);
   }
@@ -97,6 +102,7 @@ function showHint(text: string) {
 
 /** null = closed, "new" = create, Counter = edit. */
 const counterForm = ref<Counter | "new" | null>(null);
+let detailTrigger: HTMLElement | null = null;
 const categoryForm = ref<Category | "new" | null>(null);
 const detailId = ref<string | null>(null);
 
@@ -107,6 +113,7 @@ const detailCounter = computed(() =>
 );
 
 function openDetail(id: string) {
+  detailTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   detailId.value = id;
   try {
     history.pushState({ countersDetail: id }, "");
@@ -117,6 +124,7 @@ function openDetail(id: string) {
 
 function closeDetail() {
   detailId.value = null;
+  void nextTick(() => detailTrigger?.focus());
 }
 
 /** Back from a counter page returns to the overview instead of leaving the app. */
@@ -132,8 +140,15 @@ function onPopState() {
 }
 
 function onAddTestCounter() {
-  state.value = addCounter(state.value, createTestCounter());
-  showHint("Test teller toegevoegd (tijdelijk).");
+  openConfirm({
+    title: "Testdata toevoegen",
+    message:
+      "Dit voegt een teller met een jaar aan verzonnen gebeurtenissen toe, om grafieken en statistieken te bekijken.",
+    onConfirm: () => {
+      state.value = addCounter(state.value, createTestCounter());
+      showHint("Test teller toegevoegd (tijdelijk).");
+    },
+  });
 }
 
 interface ConfirmRequest {
@@ -157,6 +172,29 @@ function openConfirm(request: Omit<ConfirmRequest, "confirmLabel" | "danger"> & 
   };
 }
 
+/** The forms show the visible period value; the model stores the lifetime
+    total. Apply the cycle first, then the value — the period value depends on
+    the cycle. */
+function applyFormSave(
+  id: string,
+  payload: {
+    name: string;
+    icon: string;
+    value: number;
+    categoryId: string | null;
+    resetPeriod: "none" | "hour" | "day" | "week" | "month";
+    periodStart?: number | null;
+  },
+) {
+  const { value: display, ...rest } = payload;
+  const updated = updateCounter(state.value, id, rest);
+  const cycled = updated.counters.find((counter) => counter.id === id);
+  state.value = cycled
+    ? updateCounter(updated, id, { value: lifetimeForDisplay(cycled, display, nowDate()) })
+    : updated;
+  refreshNow();
+}
+
 function onSaveCounter(payload: {
   name: string;
   icon: string;
@@ -166,9 +204,10 @@ function onSaveCounter(payload: {
 }) {
   if (counterForm.value === "new") {
     state.value = addCounter(state.value, createCounter(payload.name, payload));
+    refreshNow();
     showHint("Teller toegevoegd.");
   } else if (counterForm.value) {
-    state.value = updateCounter(state.value, counterForm.value.id, payload);
+    applyFormSave(counterForm.value.id, payload);
     showHint("Teller opgeslagen.");
   }
   counterForm.value = null;
@@ -185,7 +224,7 @@ function onSaveDetail(
     periodStart: number | null;
   },
 ) {
-  state.value = updateCounter(state.value, id, payload);
+  applyFormSave(id, payload);
   showHint("Teller opgeslagen.");
 }
 
@@ -235,20 +274,50 @@ function onDeleteCategory(id: string) {
 
 function onCount(id: string, delta: number) {
   state.value = incrementCounter(state.value, id, delta);
-  // A fresh event can be newer than the periodic nowMs snapshot; refresh so
-  // the derived period value includes it immediately.
+  refreshNow();
+  announceCount(id);
+}
+
+/** Counting is the main action and only gives visual feedback on the card, so
+    the settled value goes to the live region. Held buttons count ~11×/s, hence
+    the debounce. */
+function announceCount(id: string) {
+  const counter = state.value.counters.find((item) => item.id === id);
+  if (!counter) {
+    return;
+  }
+
+  countAnnouncement = `${counter.name}: ${formatNumber(effectiveValue(counter, nowDate()))}`;
+  if (announceTimer !== null) {
+    window.clearTimeout(announceTimer);
+  }
+  announceTimer = window.setTimeout(() => {
+    announcement.value = countAnnouncement ?? "";
+    announceTimer = null;
+  }, 400);
+}
+
+/** Any mutation that writes an event stamped `now` has to refresh the nowMs
+    snapshot: otherwise that event falls outside the derived period value, as if
+    it were in the future. */
+function refreshNow() {
   nowMs.value = Date.now();
 }
 
 function onClearHistory(id: string) {
   const counter = state.value.counters.find((c) => c.id === id);
+  const name = counter?.name ?? "deze teller";
   openConfirm({
     title: "Geschiedenis wissen",
-    message: `Weet je zeker dat je alle tijdstippen van "${counter?.name ?? "deze teller"}" wilt wissen? De huidige waarde blijft staan.`,
+    message:
+      counter && counter.resetPeriod !== "none"
+        ? `Weet je zeker dat je alle tijdstippen van "${name}" wilt wissen? De waarde van deze periode blijft staan; daarna begint de teller weer op 0.`
+        : `Weet je zeker dat je alle tijdstippen van "${name}" wilt wissen? De huidige waarde blijft staan.`,
     confirmLabel: "Wissen",
     danger: true,
     onConfirm: () => {
-      state.value = clearHistory(state.value, id);
+      state.value = clearHistory(state.value, id, new Date());
+      refreshNow();
       showHint("Geschiedenis gewist.");
     },
   });
@@ -288,6 +357,7 @@ async function onImportFile(event: Event) {
 function applyImport() {
   if (pendingImport.value) {
     state.value = pendingImport.value;
+    refreshNow();
     showHint("Backup geïmporteerd.");
   }
   pendingImport.value = null;
@@ -313,134 +383,138 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
 
 <template>
   <main @contextmenu.prevent>
-    <section class="hero" aria-labelledby="page-title">
-      <div class="eyebrow">Dispuut Ebrius Vespertina</div>
-      <h1 id="page-title">Tellers</h1>
-      <p>
-        Houd alles bij: biertjes, shotjes, push-ups of kilometers. Tik of houd
-        vast om te tellen, groepeer tellers in categorieën en maak een backup.
-      </p>
-    </section>
-
-    <section class="toolbar" aria-label="Acties">
-      <button class="btn primary" type="button" @click="counterForm = 'new'">
-        + Teller
-      </button>
-      <button class="btn ghost" type="button" @click="categoryForm = 'new'">
-        + Categorie
-      </button>
-      <button class="btn ghost" type="button" @click="onAddTestCounter">
-        🧪 Testdata
-      </button>
-      <span class="spacer" />
-      <button
-        class="btn ghost"
-        type="button"
-        :disabled="counterCount === 0"
-        @click="exportBackup"
-      >
-        Export
-      </button>
-      <button class="btn ghost" type="button" @click="importInput?.click()">
-        Import
-      </button>
-      <input
-        ref="importInput"
-        class="hidden-input"
-        type="file"
-        accept="application/json,.json"
-        @change="onImportFile"
-      />
-    </section>
-
-    <p class="summary" aria-live="polite">
-      {{ counterCount }} {{ counterCount === 1 ? "teller" : "tellers" }} ·
-      totaal {{ formatNumber(grandTotal) }}
-      <span v-if="hint" class="hint">— {{ hint }}</span>
-    </p>
-
-    <template v-if="counterCount > 0">
-      <section
-        v-for="group in groups"
-        :key="group.category.id"
-        class="panel category"
-        :aria-labelledby="`cat-${group.category.id}`"
-      >
-        <header class="category-header">
-          <h2 :id="`cat-${group.category.id}`">{{ group.category.name }}</h2>
-          <span class="total">{{ formatNumber(group.total) }}</span>
-          <button
-            class="icon-btn"
-            type="button"
-            :aria-label="`Categorie ${group.category.name} bewerken`"
-            @click="categoryForm = group.category"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"
-              />
-            </svg>
-          </button>
-          <button
-            class="icon-btn danger"
-            type="button"
-            :aria-label="`Categorie ${group.category.name} verwijderen`"
-            @click="onDeleteCategory(group.category.id)"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"
-              />
-            </svg>
-          </button>
-        </header>
-        <div class="grid">
-          <CounterCard
-            v-for="counter in group.counters"
-            :key="counter.id"
-            :counter="counter"
-            :now-ms="nowMs"
-            @count="onCount(counter.id, $event)"
-            @open="openDetail(counter.id)"
-          />
-        </div>
+    <div class="overview" :inert="detailCounter ? true : undefined">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="eyebrow">Dispuut Ebrius Vespertina</div>
+        <h1 id="page-title">Tellers</h1>
+        <p>
+          Houd alles bij: biertjes, shotjes, push-ups of kilometers. Tik of houd
+          vast om te tellen, groepeer tellers in categorieën en maak een backup.
+        </p>
       </section>
 
-      <section v-if="loose.length > 0" class="panel category" aria-labelledby="cat-loose">
-        <header class="category-header">
-          <h2 id="cat-loose">Zonder categorie</h2>
-          <span class="total">{{ formatNumber(looseTotal) }}</span>
-        </header>
-        <div class="grid">
-          <CounterCard
-            v-for="counter in loose"
-            :key="counter.id"
-            :counter="counter"
-            :now-ms="nowMs"
-            @count="onCount(counter.id, $event)"
-            @open="openDetail(counter.id)"
-          />
-        </div>
+        <section class="toolbar" aria-label="Acties">
+        <button class="btn primary" type="button" @click="counterForm = 'new'">
+          + Teller
+        </button>
+        <button class="btn ghost" type="button" @click="categoryForm = 'new'">
+          + Categorie
+        </button>
+        <button class="btn ghost" type="button" @click="onAddTestCounter">
+          🧪 Testdata
+        </button>
+        <span class="spacer" />
+        <button
+          class="btn ghost"
+          type="button"
+          :disabled="counterCount === 0"
+          @click="exportBackup"
+        >
+          Export
+        </button>
+        <button class="btn ghost" type="button" @click="importInput?.click()">
+          Import
+        </button>
+        <input
+          ref="importInput"
+          class="hidden-input"
+          type="file"
+          accept="application/json,.json"
+          @change="onImportFile"
+        />
       </section>
-    </template>
 
-    <section v-else class="panel empty" aria-labelledby="empty-title">
-      <h2 id="empty-title">Nog geen tellers</h2>
-      <p>
-        Voeg je eerste teller toe met de knop hierboven — bijvoorbeeld
-        <span class="example">🍺 Bier</span> of <span class="example">💪 Push-ups</span>.
+      <p class="summary">
+        {{ counterCount }} {{ counterCount === 1 ? "teller" : "tellers" }} ·
+        totaal {{ formatNumber(grandTotal) }}
+        <span v-if="hint" class="hint">— {{ hint }}</span>
       </p>
-    </section>
+
+      <template v-if="counterCount > 0">
+        <section
+          v-for="group in groups"
+          :key="group.category.id"
+          class="panel category"
+          :aria-labelledby="`cat-${group.category.id}`"
+        >
+          <header class="category-header">
+            <h2 :id="`cat-${group.category.id}`">{{ group.category.name }}</h2>
+            <span class="total">{{ formatNumber(group.total) }}</span>
+            <button
+              class="icon-btn"
+              type="button"
+              :aria-label="`Categorie ${group.category.name} bewerken`"
+              @click="categoryForm = group.category"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"
+                />
+              </svg>
+            </button>
+            <button
+              class="icon-btn danger"
+              type="button"
+              :aria-label="`Categorie ${group.category.name} verwijderen`"
+              @click="onDeleteCategory(group.category.id)"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"
+                />
+              </svg>
+            </button>
+          </header>
+          <div class="grid">
+            <CounterCard
+              v-for="counter in group.counters"
+              :key="counter.id"
+              :counter="counter"
+              :now-ms="nowMs"
+              @count="onCount(counter.id, $event)"
+              @open="openDetail(counter.id)"
+            />
+          </div>
+        </section>
+
+        <section v-if="loose.length > 0" class="panel category" aria-labelledby="cat-loose">
+          <header class="category-header">
+            <h2 id="cat-loose">Zonder categorie</h2>
+            <span class="total">{{ formatNumber(looseTotal) }}</span>
+          </header>
+          <div class="grid">
+            <CounterCard
+              v-for="counter in loose"
+              :key="counter.id"
+              :counter="counter"
+              :now-ms="nowMs"
+              @count="onCount(counter.id, $event)"
+              @open="openDetail(counter.id)"
+            />
+          </div>
+        </section>
+      </template>
+
+      <section v-else class="panel empty" aria-labelledby="empty-title">
+        <h2 id="empty-title">Nog geen tellers</h2>
+        <p>
+          Voeg je eerste teller toe met de knop hierboven — bijvoorbeeld
+          <span class="example">🍺 Bier</span> of <span class="example">💪 Push-ups</span>.
+        </p>
+      </section>
+    </div>
+
+    <p class="sr-only" role="status">{{ announcement }}</p>
 
     <CounterForm
       v-if="counterForm !== null"
@@ -548,10 +622,18 @@ h1 {
   flex: 1;
 }
 
+/* On the narrowest phones the spacer pushes Export/Import onto a third row. */
+@media (max-width: 22rem) {
+  .spacer {
+    display: none;
+  }
+}
+
 .btn {
   appearance: none;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
+  min-height: 2.5rem;
   padding: 0.55rem 0.95rem;
   font: inherit;
   font-size: 0.85rem;
@@ -600,8 +682,27 @@ h1 {
   color: #94a3b8;
 }
 
+/* The card list stays mounted behind the detail view; `inert` takes it out of
+   the tab order and the accessibility tree. */
+.overview {
+  display: grid;
+  gap: 1rem;
+}
+
 .hint {
   color: #7dd3fc;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .panel {
@@ -610,7 +711,6 @@ h1 {
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
   padding: 1rem;
-  min-width: 0;
 }
 
 .category {
@@ -622,6 +722,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .category-header h2 {
@@ -652,8 +753,11 @@ h1 {
   appearance: none;
   border: none;
   background: transparent;
-  color: #64748b;
-  padding: 0.35rem;
+  color: #94a3b8;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
   border-radius: var(--radius-sm);
   cursor: pointer;
   flex: none;

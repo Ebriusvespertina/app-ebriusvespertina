@@ -32,9 +32,9 @@ const totalValue = computed(() => lockedTotal(dice.value));
 const canRoll = computed(() => dice.value.some((die) => !die.locked));
 const freeDice = computed(() => dice.value.filter((die) => !die.locked));
 
-/* De ronde is klaar, of eindigt met nog één tik: bij ≤1 vrije steen, of — met
-   "gelijke ogen samen" aan — als alle vrije stenen dezelfde waarde tonen, want
-   dan vergrendelt één tik de hele groep (2, 3 of zelfs 6 stenen). */
+/* The round is over, or ends with one tap: ≤1 free die, or — with "gelijke ogen
+   samen" on — every free die showing the same value, since one tap then locks
+   the whole group (2, 3 or even 6 dice). */
 const nearRoundEnd = computed(() => {
   if (freeDice.value.length <= 1) {
     return true;
@@ -48,9 +48,9 @@ const nearRoundEnd = computed(() => {
   );
 });
 
-/* Zodra de ronde klaar is of met één tik kan eindigen, is een tweede tik op
-   Gooien of Reset bijna altijd een mis-tik: die gooit het resultaat weg waar je
-   net naar keek. Beide knoppen gaan daarom 3 seconden op slot. */
+/* Once the round is over or one tap away, a second tap on Gooien or Reset is
+   almost always a mis-tap that throws away the result you were reading. Both
+   buttons lock for 3 seconds. */
 const cooldownRemaining = ref(0);
 let cooldownTimer: number | undefined;
 
@@ -141,8 +141,8 @@ function toggleLock(id: number) {
     target.lockGroup = group;
   }
 
-  /* Ontgrendelen laat de ronde juist weglopen van het einde; alleen een tik die
-     vergrendelt kan de ronde (bijna) afmaken. */
+  /* Unlocking moves away from the round end; only a tap that locks can finish
+     it. */
   if (nearRoundEnd.value) {
     startCooldown();
   }
@@ -317,8 +317,8 @@ function clearLocks() {
   }
 }
 
-/* Score en speelveld vullen samen precies één scherm, zodat de knoppen zonder
-   scrollen bereikbaar zijn. Safe-area en pagina-padding tellen daar niet in mee. */
+/* Score and board together fill exactly one screen, so the buttons stay
+   reachable without scrolling. Safe-area and page padding are excluded. */
 .game-layout {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -496,7 +496,7 @@ function clearLocks() {
   pointer-events: none;
 }
 
-/* Altijd 3×2, met de grootste steen die in het speelveld past. */
+/* Always 3×2, sized to the largest die that fits the play area. */
 @supports (container-type: size) {
   .dice-area {
     container-type: size;

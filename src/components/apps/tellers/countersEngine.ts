@@ -1,7 +1,7 @@
 import type { BackupFile, Category, Counter, CounterEvent, CountersState, ResetPeriod } from "./types";
 
 export const RESET_PERIOD_LABELS: Record<ResetPeriod, string> = {
-  none: "Continue",
+  none: "Loopt door",
   hour: "Per uur",
   day: "Per dag",
   week: "Per week",
@@ -43,16 +43,25 @@ export function createCounter(
     resetPeriod?: ResetPeriod;
   } = {},
 ): Counter {
+  const value = clampValue(options.value ?? 0);
+  const resetPeriod = options.resetPeriod ?? "none";
+  const createdAt = Date.now();
+  /* A periodic counter that starts with a balance: that balance belongs to the
+     current period, so record it as an event. Without it the derived period
+     value would discount the balance as "from before this period". */
+  const history: CounterEvent[] =
+    resetPeriod !== "none" && value > 0 ? [{ at: new Date(createdAt).toISOString(), delta: value }] : [];
+
   return {
     id: makeId(),
     name: name.slice(0, MAX_NAME_LENGTH),
-    value: clampValue(options.value ?? 0),
+    value,
     icon: (options.icon ?? "").slice(0, 16),
     categoryId: options.categoryId ?? null,
-    createdAt: Date.now(),
-    resetPeriod: options.resetPeriod ?? "none",
+    createdAt,
+    resetPeriod,
     periodStart: null,
-    history: [],
+    history,
   };
 }
 
@@ -222,12 +231,27 @@ export function periodStartAt(now: Date, mode: ResetPeriod, anchor: number | nul
   return new Date(y, m - 1, Math.min(dom, new Date(y, m, 0).getDate())).getTime();
 }
 
-export function clearHistory(state: CountersState, id: string): CountersState {
+export function clearHistory(state: CountersState, id: string, now: Date = new Date()): CountersState {
   return {
     ...state,
-    counters: state.counters.map((counter) =>
-      counter.id === id ? { ...counter, history: [] } : counter,
-    ),
+    counters: state.counters.map((counter) => {
+      if (counter.id !== id) {
+        return counter;
+      }
+      if (counter.resetPeriod === "none") {
+        // The lifetime total is the display; dropping the events keeps it.
+        return { ...counter, history: [] };
+      }
+      /* Periodic counter: this period's value has to stay visible while the
+         next period starts at 0. One marker event at `now` keeps the lifetime
+         total and the period derivation in step. */
+      const display = effectiveValue(counter, now);
+      return {
+        ...counter,
+        value: display,
+        history: display === 0 ? [] : [{ at: now.toISOString(), delta: display }],
+      };
+    }),
   };
 }
 
@@ -476,30 +500,39 @@ export function bucketStarts(fromMs: number, toMs: number, precision: BucketPrec
  * containing `t`) for periodic ones. The basis for display, charts and stats.
  */
 export function valueAt(counter: Counter, t: number): number {
-  const total = counter.history.reduce((sum, event) => sum + event.delta, 0);
-  const anchor = counter.value - total;
-  let cumulative = anchor;
-  for (const event of counter.history) {
-    if (Date.parse(event.at) <= t) {
-      cumulative += event.delta;
+  /* Everything the counter knows about `limit`: events after it are subtracted
+     from the lifetime total. Trimming can only drop events *before* the oldest
+     surviving one, so this stays correct when a single period holds more events
+     than MAX_HISTORY — the dropped amount never leaks into the period. */
+  const lifetimeUpTo = (limit: number) => {
+    let sum = counter.value;
+    for (const event of counter.history) {
+      if (Date.parse(event.at) > limit) {
+        sum -= event.delta;
+      }
     }
-  }
+    return sum;
+  };
+
   if (counter.resetPeriod === "none") {
-    return cumulative;
+    return lifetimeUpTo(t);
   }
+
   const boundary = periodStartAt(new Date(t), counter.resetPeriod, counter.periodStart);
-  let before = 0;
-  for (const event of counter.history) {
-    if (Date.parse(event.at) < boundary) {
-      before += event.delta;
-    }
-  }
-  const firstAt = Date.parse(counter.history[0]?.at ?? "");
-  if (Number.isFinite(firstAt) && firstAt < boundary) {
-    // The initial value was consumed by an earlier period.
-    cumulative -= anchor;
-  }
-  return cumulative - before;
+  return lifetimeUpTo(t) - lifetimeUpTo(boundary);
+}
+
+/**
+ * Lifetime total that makes the derived per-period value equal `display` right
+ * now. Forms show the value the user sees, so saving has to translate it back
+ * into the lifetime total the model stores.
+ */
+export function lifetimeForDisplay(
+  counter: Counter,
+  display: number,
+  now: Date = new Date(),
+): number {
+  return clampValue(counter.value + (Math.round(display) - effectiveValue(counter, now)));
 }
 
 /** Value to display right now. Non-destructive: derived from history. */

@@ -16,7 +16,9 @@ const emit = defineEmits<{ count: [delta: number] }>();
 let holdTimer: number | null = null;
 let repeatTimer: number | null = null;
 let activePointerId: number | null = null;
-let pendingDelta = 0;
+/** Delta of the tap in progress; null when no pointerdown preceded the click
+    (keyboard activation), so the click falls back to the configured delta. */
+let pendingDelta: number | null = null;
 let heldRepeat = false;
 
 function clearTimers() {
@@ -61,10 +63,11 @@ function onPointerEnd(event: PointerEvent) {
 function onClick() {
   if (heldRepeat) {
     heldRepeat = false;
+    pendingDelta = null;
     return;
   }
-  emit("count", pendingDelta);
-  pendingDelta = 0;
+  emit("count", pendingDelta ?? props.delta);
+  pendingDelta = null;
 }
 </script>
 

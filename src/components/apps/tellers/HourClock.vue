@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 /** A last.fm-style 24-hour clock: one wedge per hour of day, starting at
     00:00 (top) and ending just before 23:59, going clockwise. Wedge length
@@ -26,6 +26,40 @@ const peakHour = computed(() => {
   return best;
 });
 const activeHour = ref(peakHour.value);
+const userPicked = ref(false);
+
+/* Until the user picks an hour the selection follows the peak, including when
+   the data changes later. */
+watch(peakHour, (peak) => {
+  if (!userPicked.value) {
+    activeHour.value = peak;
+  }
+});
+
+function selectHour(hour: number) {
+  userPicked.value = true;
+  activeHour.value = hour;
+}
+
+function onWedgeKeydown(event: KeyboardEvent, hour: number) {
+  let next = hour;
+
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    next = (hour + 1) % 24;
+  } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    next = (hour + 23) % 24;
+  } else if (event.key === "Home") {
+    next = 0;
+  } else if (event.key === "End") {
+    next = 23;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  selectHour(next);
+  document.querySelector<SVGGElement>(`[data-wedge="${next}"]`)?.focus();
+}
 
 function pt(r: number, a: number): [number, number] {
   return [C + r * Math.cos(a), C + r * Math.sin(a)];
@@ -71,22 +105,35 @@ const activeCount = computed(() => props.counts[activeHour.value] || 0);
 
 <template>
   <div class="clock-wrap">
-    <svg :viewBox="`0 0 ${S} ${S}`" class="clock" role="img" aria-label="24-uurs overzicht">
+    <svg
+      :viewBox="`0 0 ${S} ${S}`"
+      class="clock"
+      role="group"
+      aria-label="Verdeling per uur"
+    >
       <circle class="face" :cx="C" :cy="C" :r="R_MAX" />
       <circle class="mid" :cx="C" :cy="C" :r="R_BASE" fill="none" />
       <g>
-        <path
+        <g
           v-for="hour in 24"
           :key="hour - 1"
-          :d="sectorPath(hour - 1)"
-          :fill="colorFor(hour - 1)"
-          :class="{ active: activeHour === hour - 1 }"
-          @pointerdown="activeHour = hour - 1"
+          :data-wedge="hour - 1"
+          role="button"
+          :tabindex="activeHour === hour - 1 ? 0 : -1"
+          :aria-label="`${hour - 1}:00 – ${counts[hour - 1] || 0} gebeurtenissen`"
+          @pointerdown="selectHour(hour - 1)"
+          @focus="selectHour(hour - 1)"
+          @keydown="onWedgeKeydown($event, hour - 1)"
         >
+          <path
+            :d="sectorPath(hour - 1)"
+            :fill="colorFor(hour - 1)"
+            :class="{ active: activeHour === hour - 1 }"
+          />
           <title>{{ hour - 1 }}:00 – {{ counts[hour - 1] || 0 }} gebeurtenissen</title>
-        </path>
+        </g>
       </g>
-      <g class="labels">
+      <g class="labels" aria-hidden="true">
         <text
           v-for="(lp, i) in labelPositions"
           :key="i"
@@ -98,14 +145,17 @@ const activeCount = computed(() => props.counts[activeHour.value] || 0);
           {{ lp.label }}
         </text>
       </g>
-      <text class="center-hour" :x="C" :y="C - 4" text-anchor="middle">
+      <text class="center-hour" :x="C" :y="C - 4" text-anchor="middle" aria-hidden="true">
         {{ String(activeHour).padStart(2, "0") }}:00
       </text>
-      <text class="center-count" :x="C" :y="C + 18" text-anchor="middle">
+      <text class="center-count" :x="C" :y="C + 18" text-anchor="middle" aria-hidden="true">
         {{ activeCount }}
       </text>
     </svg>
     <p class="clock-note">Tik op een uur voor het aantal gebeurtenissen.</p>
+    <p class="sr-only" role="status">
+      {{ String(activeHour).padStart(2, "0") }}:00 – {{ activeCount }} gebeurtenissen
+    </p>
   </div>
 </template>
 
@@ -138,9 +188,35 @@ path.active {
   stroke-linejoin: round;
 }
 
+.clock g[role="button"] {
+  cursor: pointer;
+}
+
+.clock g[role="button"]:focus-visible {
+  outline: none;
+}
+
+.clock g[role="button"]:focus-visible path {
+  stroke: #7dd3fc;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .labels text {
   fill: #94a3b8;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -162,6 +238,6 @@ path.active {
 .clock-note {
   margin: 0;
   font-size: 0.72rem;
-  color: #64748b;
+  color: #94a3b8;
 }
 </style>

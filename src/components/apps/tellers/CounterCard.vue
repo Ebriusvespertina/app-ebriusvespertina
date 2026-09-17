@@ -24,7 +24,14 @@ const displayValue = () => display.value.toLocaleString("nl-NL");
 </script>
 
 <template>
-  <article class="card" @contextmenu.prevent @click="emit('open')">
+  <article class="card" @contextmenu.prevent>
+    <button
+      class="open"
+      type="button"
+      :aria-label="`${counter.name} openen`"
+      @click="emit('open')"
+    ></button>
+
     <header class="topline">
       <span class="icon" aria-hidden="true">{{ counter.icon || "🔢" }}</span>
       <h3 class="name">{{ counter.name }}</h3>
@@ -38,14 +45,15 @@ const displayValue = () => display.value.toLocaleString("nl-NL");
     </p>
 
     <div class="buttons">
-      <HoldButton :delta="-1" :label="`${counter.name} omlaag`">−</HoldButton>
-      <HoldButton :delta="1" :label="`${counter.name} omhoog`">+</HoldButton>
+      <HoldButton :delta="-1" :label="`${counter.name} omlaag`" @count="emit('count', $event)">−</HoldButton>
+      <HoldButton :delta="1" :label="`${counter.name} omhoog`" @count="emit('count', $event)">+</HoldButton>
     </div>
   </article>
 </template>
 
 <style scoped>
 .card {
+  position: relative;
   display: grid;
   gap: 0.55rem;
   min-width: 0;
@@ -58,11 +66,30 @@ const displayValue = () => display.value.toLocaleString("nl-NL");
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   touch-action: manipulation;
-  cursor: pointer;
 }
 
 .card:active {
   border-color: rgba(56, 189, 248, 0.35);
+}
+
+/* The whole card opens the counter without nesting its content inside a button
+   (that would strip the h3 of its heading semantics). The ± buttons sit above
+   this overlay. */
+.open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+}
+
+.open:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: -2px;
 }
 
 .topline {
@@ -116,6 +143,8 @@ const displayValue = () => display.value.toLocaleString("nl-NL");
 }
 
 .buttons {
+  position: relative;
+  z-index: 2;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;

@@ -220,6 +220,20 @@ describe("history recording", () => {
     expect(cleared.counters[0].value).toBe(4);
     expect(cleared.counters[0].history).toEqual([]);
   });
+
+  it("clearHistory keeps a periodic counter's period value, then it resets again", () => {
+    const now = new Date();
+    const counter = createCounter("Dag", { resetPeriod: "day" });
+    counter.value = 4;
+    counter.history = [{ at: new Date(now.getTime() - 3_600_000).toISOString(), delta: 4 }];
+    const state = addCounter(emptyState(), counter);
+    const cleared = clearHistory(state, counter.id, now).counters[0];
+    expect(cleared.value).toBe(4);
+    expect(effectiveValue(cleared, now)).toBe(4);
+    // The point of the marker event: the next period starts from 0 again,
+    // which an empty history could no longer express.
+    expect(effectiveValue(cleared, new Date(now.getTime() + DAY_MS))).toBe(0);
+  });
 });
 
 describe("counterStats", () => {
@@ -444,16 +458,28 @@ describe("periodRows", () => {
 
   it("weeks start on monday", () => {
     const counter = createCounter("Bier", {});
-    const monday = new Date(2026, 7, 3, 12, 0); // 2026-08-03
-    const sunday = new Date(2026, 7, 9, 12, 0); // 2026-08-09
+    // Monday of the current ISO week and the Sunday that closes it, so the
+    // window of `periodRows` always contains them (a hardcoded week rots).
+    const now = new Date();
+    const monday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - ((now.getDay() + 6) % 7),
+      12,
+      0,
+    );
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6, 12, 0);
     counter.history = [
       { at: monday.toISOString(), delta: 1 },
       { at: sunday.toISOString(), delta: 1 },
     ];
     const weeks = periodRows(counter, "week", 4);
     const row = weeks.find((r) => r.events > 0);
+    const key = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(
+      monday.getDate(),
+    ).padStart(2, "0")}`;
     expect(row).toBeDefined();
-    expect(row!.key).toBe("2026-08-03");
+    expect(row!.key).toBe(key);
     expect(row!.events).toBe(2);
   });
 });
@@ -519,6 +545,27 @@ describe("periodic reset (non-destructive)", () => {
     expect(effectiveValue(weekly, new Date(2026, 7, 12))).toBe(6); // zelfde week: totaal
     const continuous = { ...counter, resetPeriod: "none" as const };
     expect(effectiveValue(continuous, new Date(2026, 7, 12))).toBe(6); // alles
+  });
+
+  it("seeds a period marker so a periodic counter with a starting value shows it", () => {
+    const withValue = createCounter("Dag", { value: 5, resetPeriod: "day" });
+    expect(withValue.history).toHaveLength(1);
+    expect(effectiveValue(withValue)).toBe(5); // vandaag
+    expect(effectiveValue(withValue, new Date(Date.now() + DAY_MS))).toBe(0); // morgen
+    // continuous counters need no marker: the lifetime total is the display
+    expect(createCounter("Bier", { value: 5 }).history).toEqual([]);
+  });
+
+  it("does not leak trimmed history into the current period", () => {
+    const now = new Date(2026, 8, 17, 12, 0);
+    const counter = createCounter("Dag", { resetPeriod: "day" });
+    // Only today's events survived the cap; the earlier 1500 is still in `value`.
+    counter.history = Array.from({ length: MAX_HISTORY }, (_, i) => ({
+      at: new Date(now.getTime() - 1000 - i).toISOString(),
+      delta: 1,
+    }));
+    counter.value = 1500 + MAX_HISTORY;
+    expect(effectiveValue(counter, now)).toBe(MAX_HISTORY);
   });
 });
 

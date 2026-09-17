@@ -204,7 +204,7 @@ function toggleLock() {
   color: #34d399;
 }
 
-/* Kleinere stenen (bv. telefoon in landschap) hebben geen ruimte voor het label. */
+/* Smaller dice (phone in landscape) have no room for the label. */
 @container (max-width: 4.75rem) {
   .die-status {
     display: none;

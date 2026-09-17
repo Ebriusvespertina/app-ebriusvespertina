@@ -11,3 +11,14 @@ import CountersPage from '../../components/apps/tellers/CountersPage.vue';
 >
 	<CountersPage client:only="vue" />
 </BaseLayout>
+
+<style is:global>
+	/* De standaard focusring van de browser is donker (rgb(16,16,16)) en dus
+	   onzichtbaar op deze donkere kaarten; geef elke knop de accentkleur.
+	   Specifiekere ringen (heatmapcel, kaart-overlay, klokwig) blijven leidend. */
+	main button:focus-visible,
+	main [role="button"]:focus-visible {
+		outline: 2px solid #7dd3fc;
+		outline-offset: 2px;
+	}
+</style>

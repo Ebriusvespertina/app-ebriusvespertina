@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import HistoryChart from "./HistoryChart.vue";
 import HoldButton from "./HoldButton.vue";
 import HourClock from "./HourClock.vue";
@@ -41,6 +41,36 @@ const emit = defineEmits<{
 
 const DAY_NAMES = ["ma", "di", "wo", "do", "vr", "za", "zo"];
 
+const dialogEl = ref<HTMLElement | null>(null);
+
+/* Parts of a counter: the counting surface, the numbers and charts, and
+   management. */
+const TABS = ["counter", "stats", "settings"] as const;
+type TabId = (typeof TABS)[number];
+const activeTab = ref<TabId>("counter");
+
+function onTabKeydown(event: KeyboardEvent, id: TabId) {
+  const index = TABS.indexOf(id);
+  let next = index;
+
+  if (event.key === "ArrowRight") {
+    next = (index + 1) % TABS.length;
+  } else if (event.key === "ArrowLeft") {
+    next = (index - 1 + TABS.length) % TABS.length;
+  } else if (event.key === "Home") {
+    next = 0;
+  } else if (event.key === "End") {
+    next = TABS.length - 1;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  const target = TABS[next];
+  activeTab.value = target;
+  void nextTick(() => document.getElementById(`tab-${target}`)?.focus());
+}
+
 const now = computed(() => new Date(props.nowMs));
 const display = computed(() => effectiveValue(props.counter, now.value));
 const stats = computed(() => counterStats(props.counter));
@@ -78,6 +108,35 @@ function selectCell(weekday: number, hour: number) {
     selectedCell.value?.weekday === weekday && selectedCell.value.hour === hour
       ? null
       : { weekday, hour };
+}
+
+/* One tab stop for the whole heatmap, arrows move between cells: otherwise all
+   168 cells sit in the tab order. */
+const focusedCell = ref<{ weekday: number; hour: number }>({ weekday: 0, hour: 0 });
+
+function onCellKeydown(event: KeyboardEvent, weekday: number, hour: number) {
+  let nextWeekday = weekday;
+  let nextHour = hour;
+
+  if (event.key === "ArrowRight") {
+    nextHour = (hour + 1) % 24;
+  } else if (event.key === "ArrowLeft") {
+    nextHour = (hour + 23) % 24;
+  } else if (event.key === "ArrowDown") {
+    nextWeekday = (weekday + 1) % 7;
+  } else if (event.key === "ArrowUp") {
+    nextWeekday = (weekday + 6) % 7;
+  } else if (event.key === "Home") {
+    nextHour = 0;
+  } else if (event.key === "End") {
+    nextHour = 23;
+  } else {
+    return;
+  }
+
+  event.preventDefault();
+  focusedCell.value = { weekday: nextWeekday, hour: nextHour };
+  document.querySelector<HTMLButtonElement>(`[data-cell="${nextWeekday}-${nextHour}"]`)?.focus();
 }
 
 function heatIntensity(count: number): number {
@@ -253,17 +312,17 @@ const form = reactive({
   categoryId: props.counter.categoryId,
   resetPeriod: props.counter.resetPeriod,
 });
-const valueText = ref(String(props.counter.value));
+const valueLabel = computed(() =>
+  form.resetPeriod === "none" ? "Waarde" : "Waarde deze periode",
+);
+const valueText = ref(String(effectiveValue(props.counter, now.value)));
 const periodStartText = ref(periodStartToText(props.counter.periodStart));
 const settingsError = ref("");
 const savedHint = ref("");
 
-watch(
-  () => props.counter.value,
-  (value) => {
-    valueText.value = String(value);
-  },
-);
+watch(display, (value) => {
+  valueText.value = String(value);
+});
 watch(
   () => props.counter.periodStart,
   (value) => {
@@ -345,6 +404,7 @@ function onKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   document.addEventListener("keydown", onKeydown);
+  dialogEl.value?.focus();
 });
 
 onBeforeUnmount(() => {
@@ -353,7 +413,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="detail" role="dialog" aria-modal="true" :aria-label="counter.name">
+  <div
+    ref="dialogEl"
+    class="detail"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    :aria-label="counter.name"
+  >
     <header class="head">
       <button type="button" class="back" aria-label="Terug naar tellers" @click="emit('close')">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -372,340 +439,446 @@ onBeforeUnmount(() => {
         <h2>{{ counter.name }}</h2>
         <span class="cycle">{{ cycleLabel }}</span>
       </div>
-      <span class="head-value">{{ display.toLocaleString("nl-NL") }}</span>
     </header>
 
-    <section class="stepper">
-      <HoldButton :delta="-1" :label="`${counter.name} omlaag`" size="lg" @count="emit('count', $event)">−</HoldButton>
-      <HoldButton :delta="1" :label="`${counter.name} omhoog`" size="lg" @count="emit('count', $event)">+</HoldButton>
-    </section>
+    <div class="tab-panels">
+      <section
+        id="panel-counter"
+        v-show="activeTab === 'counter'"
+        class="tab-panel counter"
+        role="tabpanel"
+        aria-labelledby="tab-counter"
+      >
+        <p class="head-value">{{ display.toLocaleString("nl-NL") }}</p>
 
-    <p v-if="counter.resetPeriod !== 'none'" class="lifetime-note">
-      Deze periode: <strong>{{ display.toLocaleString("nl-NL") }}</strong>
-      <span v-if="stats.eventCount > 0" class="muted">
-        · totaal ooit {{ counter.value.toLocaleString("nl-NL") }}
-      </span>
-    </p>
+        <section class="stepper">
+          <HoldButton :delta="-1" :label="`${counter.name} omlaag`" size="lg" @count="emit('count', $event)">−</HoldButton>
+          <HoldButton :delta="1" :label="`${counter.name} omhoog`" size="lg" @count="emit('count', $event)">+</HoldButton>
+        </section>
 
-    <section v-if="stats.eventCount > 0" class="panel" aria-labelledby="stats-title">
-      <h3 id="stats-title">Statistieken</h3>
-
-      <dl class="tiles">
-        <div class="tile">
-          <dt>Netto</dt>
-          <dd :class="stats.net >= 0 ? 'plus' : 'minus'">
-            {{ stats.net >= 0 ? "+" : "" }}{{ stats.net.toLocaleString("nl-NL") }}
-          </dd>
-        </div>
-        <div class="tile">
-          <dt>+ Totaal</dt>
-          <dd class="plus">+{{ stats.totalPlus.toLocaleString("nl-NL") }}</dd>
-        </div>
-        <div class="tile">
-          <dt>− Totaal</dt>
-          <dd class="minus">{{ stats.totalMinus.toLocaleString("nl-NL") }}</dd>
-        </div>
-        <div class="tile">
-          <dt>Gebeurtenissen</dt>
-          <dd>{{ stats.eventCount.toLocaleString("nl-NL") }}</dd>
-        </div>
-        <div class="tile">
-          <dt>Actiefste dag</dt>
-          <dd class="wrap">{{ dayLabel(stats.busiestDayKey) }}</dd>
-        </div>
-        <div class="tile">
-          <dt>Actiefste uur</dt>
-          <dd class="wrap">{{ hourLabel(stats.busiestHourKey) }}</dd>
-        </div>
-      </dl>
-
-      <div class="sub" aria-labelledby="heat-title">
-        <div class="seg-head">
-          <h4 id="heat-title">Warmtekaart</h4>
-          <div class="segmented" role="tablist" aria-label="Warmtekaart weergave">
-            <button
-              type="button"
-              class="seg"
-              :class="{ active: heatView === 'grid' }"
-              @click="heatView = 'grid'"
-            >
-              Dag × uur
-            </button>
-            <button
-              type="button"
-              class="seg"
-              :class="{ active: heatView === 'clock' }"
-              @click="heatView = 'clock'"
-            >
-              24 uur
-            </button>
-          </div>
-        </div>
-
-        <template v-if="heatView === 'grid'">
-          <div class="heatmap">
-            <div v-for="(row, weekday) in heatmap" :key="weekday" class="hm-row">
-              <span class="hm-day">{{ DAY_NAMES[weekday] }}</span>
-              <span class="hm-row-total" :title="`${DAY_NAMES[weekday]}: ${rowTotals[weekday]} gebeurtenissen`">
-                {{ rowTotals[weekday] }}
-              </span>
-              <button
-                v-for="(count, hour) in row"
-                :key="hour"
-                type="button"
-                class="hm-cell"
-                :class="{
-                  selected:
-                    selectedCell !== null &&
-                    selectedCell.weekday === weekday &&
-                    selectedCell.hour === hour,
-                }"
-                :style="{ '--heat': heatIntensity(count) }"
-                :aria-label="`${DAY_NAMES[weekday]} ${hour}:00 – ${count} gebeurtenissen`"
-                @click="selectCell(weekday, hour)"
-              ></button>
-            </div>
-            <div class="hm-row hm-bottom">
-              <span class="hm-day" aria-hidden="true"></span>
-              <span class="hm-row-total" aria-hidden="true"></span>
-              <span v-for="h in 24" :key="h" class="hm-hour">{{ h - 1 }}</span>
-            </div>
-          </div>
-          <div class="hm-legend" aria-hidden="true">
-            <span>minder</span>
-            <span class="legend-bar"></span>
-            <span>meer</span>
-          </div>
-          <div v-if="selectedCell" class="hm-info" role="status">
-            <strong>
-              {{ DAY_NAMES[selectedCell.weekday] }} {{ String(selectedCell.hour).padStart(2, "0") }}:00
-            </strong>
-            <span>{{ cellCount }} {{ cellCount === 1 ? "gebeurtenis" : "gebeurtenissen" }}</span>
-            <span>Gem. dit uur: {{ formatAvg(hourAvg) }} / dag</span>
-            <span>Gem. deze dag: {{ formatAvg(dayAvg) }} / uur</span>
-          </div>
-        </template>
-
-        <HourClock v-else :counts="colTotals" />
-      </div>
-
-      <div class="sub">
-        <div class="seg-head">
-          <h4>Overzicht per</h4>
-          <div class="segmented" role="tablist" aria-label="Periode">
-            <button
-              v-for="(cfg, mode) in PERIOD_CONFIG"
-              :key="mode"
-              type="button"
-              class="seg"
-              :class="{ active: periodMode === mode }"
-              @click="periodMode = mode"
-            >
-              {{ cfg.label }}
-            </button>
-          </div>
-        </div>
-        <div class="periods">
-          <div v-for="row in periods" :key="row.key" class="period-row">
-            <span class="period-label">{{ periodLabel(row) }}</span>
-            <span class="period-bar-wrap">
-              <span
-                class="period-bar"
-                :style="{ width: `${(row.events / periodMax) * 100}%` }"
-              ></span>
-            </span>
-            <span class="period-count">{{ row.events }}</span>
-            <span class="period-net" :class="row.net >= 0 ? 'plus' : 'minus'">
-              {{ row.net >= 0 ? "+" : "" }}{{ row.net }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div class="sub">
-        <div class="seg-head">
-          <h4>Verloop</h4>
-          <div class="segmented" role="tablist" aria-label="Zoom niveau">
-            <button
-              v-for="cfg in ZOOMS"
-              :key="cfg.id"
-              type="button"
-              class="seg"
-              :class="{ active: zoom === cfg.id }"
-              @click="setZoom(cfg.id)"
-            >
-              {{ cfg.label }}
-            </button>
-          </div>
-        </div>
-
-        <div class="nav-row">
-          <button
-            type="button"
-            class="nav-btn"
-            aria-label="Eerder"
-            :disabled="!canGoBack"
-            @click="goBack"
-          >
-            ‹
-          </button>
-          <span class="nav-range">{{ windowLabel }}</span>
-          <button
-            type="button"
-            class="nav-btn"
-            aria-label="Later"
-            :disabled="!canGoForward"
-            @click="goForward"
-          >
-            ›
-          </button>
-          <button
-            type="button"
-            class="btn ghost small"
-            :disabled="!canGoForward"
-            @click="goNow"
-          >
-            Nu
-          </button>
-        </div>
-
-        <div class="seg-head precision">
-          <h4>Precisie</h4>
-          <div class="segmented" role="tablist" aria-label="Precisie">
-            <button
-              v-for="p in zoomCfg.precisions"
-              :key="p"
-              type="button"
-              class="seg"
-              :class="{ active: precision === p }"
-              @click="setPrecision(p)"
-            >
-              {{ PRECISION_LABELS[p] }}
-            </button>
-          </div>
-        </div>
-
-        <HistoryChart :points="windowPoints" :mode="chartMode" :x-label="xLabel" />
-        <p v-if="counter.resetPeriod !== 'none'" class="chart-note">
-          Balkjes tonen de waarde per periode; bij een grovere precisie (bijv. week bij
-          dag-reset) het totaal van die periode.
+        <p v-if="counter.resetPeriod !== 'none'" class="lifetime-note">
+          Deze periode: <strong>{{ display.toLocaleString("nl-NL") }}</strong>
+          <span v-if="stats.eventCount > 0" class="muted">
+            · totaal ooit {{ counter.value.toLocaleString("nl-NL") }}
+          </span>
         </p>
-      </div>
-    </section>
+      </section>
 
-    <p v-else class="panel no-history">
-      Nog geen gebeurtenissen. Tik op + of − om te tellen — elke wijziging wordt automatisch
-      bijgehouden voor statistieken en de grafiek.
-    </p>
+      <section
+        id="panel-stats"
+        v-show="activeTab === 'stats'"
+        class="tab-panel"
+        role="tabpanel"
+        aria-labelledby="tab-stats"
+      >
+        <section v-if="stats.eventCount > 0" class="panel" aria-labelledby="stats-title">
+          <h3 id="stats-title">Statistieken</h3>
 
-    <section class="panel" aria-labelledby="settings-title">
-      <h3 id="settings-title">Instellingen</h3>
-      <form class="form" @submit.prevent="saveSettings">
-        <label class="field">
-          <span>Naam</span>
-          <input v-model="form.name" type="text" maxlength="60" placeholder="Bijv. Bier, Push-ups" />
-        </label>
+          <dl class="tiles">
+            <div class="tile">
+              <dt>Netto</dt>
+              <dd :class="stats.net >= 0 ? 'plus' : 'minus'">
+                {{ stats.net >= 0 ? "+" : "" }}{{ stats.net.toLocaleString("nl-NL") }}
+              </dd>
+            </div>
+            <div class="tile">
+              <dt>+ Totaal</dt>
+              <dd class="plus">+{{ stats.totalPlus.toLocaleString("nl-NL") }}</dd>
+            </div>
+            <div class="tile">
+              <dt>− Totaal</dt>
+              <dd class="minus">{{ stats.totalMinus.toLocaleString("nl-NL") }}</dd>
+            </div>
+            <div class="tile">
+              <dt>Gebeurtenissen</dt>
+              <dd>{{ stats.eventCount.toLocaleString("nl-NL") }}</dd>
+            </div>
+            <div class="tile">
+              <dt>Actiefste dag</dt>
+              <dd class="wrap">{{ dayLabel(stats.busiestDayKey) }}</dd>
+            </div>
+            <div class="tile">
+              <dt>Actiefste uur</dt>
+              <dd class="wrap">{{ hourLabel(stats.busiestHourKey) }}</dd>
+            </div>
+          </dl>
 
-        <div class="field">
-          <span>Icoon</span>
-          <div class="emoticon-grid">
-            <button
-              v-for="emoticon in EMOTICONS"
-              :key="emoticon"
-              class="emoticon"
-              :class="{ active: form.icon === emoticon }"
-              type="button"
-              :aria-label="`Icoon ${emoticon}`"
-              @click="pickEmoticon(emoticon)"
-            >
-              {{ emoticon }}
-            </button>
+          <div class="sub" aria-labelledby="heat-title">
+            <div class="seg-head">
+              <h4 id="heat-title">Warmtekaart</h4>
+              <div class="segmented" role="tablist" aria-label="Warmtekaart weergave">
+                <button
+                  type="button"
+                  class="seg"
+                  :class="{ active: heatView === 'grid' }"
+                  @click="heatView = 'grid'"
+                >
+                  Dag × uur
+                </button>
+                <button
+                  type="button"
+                  class="seg"
+                  :class="{ active: heatView === 'clock' }"
+                  @click="heatView = 'clock'"
+                >
+                  24 uur
+                </button>
+              </div>
+            </div>
+
+            <template v-if="heatView === 'grid'">
+              <div class="heatmap">
+                <div v-for="(row, weekday) in heatmap" :key="weekday" class="hm-row">
+                  <span class="hm-day">{{ DAY_NAMES[weekday] }}</span>
+                  <span class="hm-row-total" :title="`${DAY_NAMES[weekday]}: ${rowTotals[weekday]} gebeurtenissen`">
+                    {{ rowTotals[weekday] }}
+                  </span>
+                  <button
+                    v-for="(count, hour) in row"
+                    :key="hour"
+                    type="button"
+                    class="hm-cell"
+                    :class="{
+                      selected:
+                        selectedCell !== null &&
+                        selectedCell.weekday === weekday &&
+                        selectedCell.hour === hour,
+                    }"
+                    :style="{ '--heat': heatIntensity(count) }"
+                    :aria-label="`${DAY_NAMES[weekday]} ${hour}:00 – ${count} gebeurtenissen`"
+                    :data-cell="`${weekday}-${hour}`"
+                    :tabindex="
+                      focusedCell.weekday === weekday && focusedCell.hour === hour ? 0 : -1
+                    "
+                    @click="selectCell(weekday, hour)"
+                    @focus="focusedCell = { weekday, hour }"
+                    @keydown="onCellKeydown($event, weekday, hour)"
+                  ></button>
+                </div>
+                <div class="hm-row hm-bottom">
+                  <span class="hm-day" aria-hidden="true"></span>
+                  <span class="hm-row-total" aria-hidden="true"></span>
+                  <span v-for="h in 24" :key="h" class="hm-hour">{{ h - 1 }}</span>
+                </div>
+              </div>
+              <div class="hm-legend" aria-hidden="true">
+                <span>minder</span>
+                <span class="legend-bar"></span>
+                <span>meer</span>
+              </div>
+              <div v-if="selectedCell" class="hm-info" role="status">
+                <strong>
+                  {{ DAY_NAMES[selectedCell.weekday] }} {{ String(selectedCell.hour).padStart(2, "0") }}:00
+                </strong>
+                <span>{{ cellCount }} {{ cellCount === 1 ? "gebeurtenis" : "gebeurtenissen" }}</span>
+                <span>Gem. dit uur: {{ formatAvg(hourAvg) }} / dag</span>
+                <span>Gem. deze dag: {{ formatAvg(dayAvg) }} / uur</span>
+              </div>
+            </template>
+
+            <HourClock v-else :counts="colTotals" />
           </div>
-          <input v-model="form.icon" type="text" maxlength="16" placeholder="Of typ zelf een icoon" />
-        </div>
 
-        <label class="field">
-          <span>Waarde</span>
-          <input v-model="valueText" type="text" inputmode="numeric" />
-        </label>
-
-        <label class="field">
-          <span>Categorie</span>
-          <select v-model="form.categoryId">
-            <option :value="null">Zonder categorie</option>
-            <option v-for="category in categories" :key="category.id" :value="category.id">
-              {{ category.name }}
-            </option>
-          </select>
-        </label>
-
-        <div class="field">
-          <span>Start opnieuw op 0</span>
-          <div class="segmented" role="radiogroup" aria-label="Reset cyclus">
-            <button
-              v-for="(label, mode) in RESET_PERIOD_LABELS"
-              :key="mode"
-              type="button"
-              class="seg"
-              :class="{ active: form.resetPeriod === mode }"
-              @click="setResetPeriod(mode)"
-            >
-              {{ label }}
-            </button>
+          <div class="sub">
+            <div class="seg-head">
+              <h4>Overzicht per</h4>
+              <div class="segmented" role="tablist" aria-label="Periode">
+                <button
+                  v-for="(cfg, mode) in PERIOD_CONFIG"
+                  :key="mode"
+                  type="button"
+                  class="seg"
+                  :class="{ active: periodMode === mode }"
+                  @click="periodMode = mode"
+                >
+                  {{ cfg.label }}
+                </button>
+              </div>
+            </div>
+            <div class="periods">
+              <div v-for="row in periods" :key="row.key" class="period-row">
+                <span class="period-label">{{ periodLabel(row) }}</span>
+                <span class="period-bar-wrap">
+                  <span
+                    class="period-bar"
+                    :style="{ width: `${(row.events / periodMax) * 100}%` }"
+                  ></span>
+                </span>
+                <span class="period-count">{{ row.events }}</span>
+                <span class="period-net" :class="row.net >= 0 ? 'plus' : 'minus'">
+                  {{ row.net >= 0 ? "+" : "" }}{{ row.net }}
+                </span>
+              </div>
+            </div>
           </div>
-          <template v-if="form.resetPeriod !== 'none'">
-            <label class="field-inline">
-              <span class="sub-label">Periode start (vandaag = begin cyclus)</span>
-              <input v-model="periodStartText" type="date" />
-              <button type="button" class="btn ghost small" @click="setPeriodStartNow">
-                Vandaag
+
+          <div class="sub">
+            <div class="seg-head">
+              <h4>Verloop</h4>
+              <div class="segmented" role="tablist" aria-label="Zoom niveau">
+                <button
+                  v-for="cfg in ZOOMS"
+                  :key="cfg.id"
+                  type="button"
+                  class="seg"
+                  :class="{ active: zoom === cfg.id }"
+                  @click="setZoom(cfg.id)"
+                >
+                  {{ cfg.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="nav-row">
+              <button
+                type="button"
+                class="nav-btn"
+                aria-label="Eerder"
+                :disabled="!canGoBack"
+                @click="goBack"
+              >
+                ‹
+              </button>
+              <span class="nav-range">{{ windowLabel }}</span>
+              <button
+                type="button"
+                class="nav-btn"
+                aria-label="Later"
+                :disabled="!canGoForward"
+                @click="goForward"
+              >
+                ›
               </button>
               <button
-                v-if="periodStartText"
                 type="button"
                 class="btn ghost small"
-                @click="periodStartText = ''"
+                :disabled="!canGoForward"
+                @click="goNow"
               >
-                Automatisch
+                Nu
               </button>
-            </label>
-            <p class="field-hint">
-              Zonder datum starten periodes op kalender-grenzen (middernacht / maandag / 1e van de
-              maand). Een datum verplaatst de grenzen, niets gaat verloren.
+            </div>
+
+            <div class="seg-head precision">
+              <h4>Precisie</h4>
+              <div class="segmented" role="tablist" aria-label="Precisie">
+                <button
+                  v-for="p in zoomCfg.precisions"
+                  :key="p"
+                  type="button"
+                  class="seg"
+                  :class="{ active: precision === p }"
+                  @click="setPrecision(p)"
+                >
+                  {{ PRECISION_LABELS[p] }}
+                </button>
+              </div>
+            </div>
+
+            <HistoryChart :points="windowPoints" :mode="chartMode" :x-label="xLabel" />
+            <p v-if="counter.resetPeriod !== 'none'" class="chart-note">
+              Balkjes tonen de waarde per periode; bij een grovere precisie (bijv. week bij
+              dag-reset) het totaal van die periode.
             </p>
-          </template>
-        </div>
+          </div>
+        </section>
 
-        <p v-if="settingsError" class="error" role="alert">{{ settingsError }}</p>
-        <p v-if="savedHint" class="saved" aria-live="polite">{{ savedHint }}</p>
+        <p v-else class="panel no-history">
+          Nog geen gebeurtenissen. Tik op + of − om te tellen — elke wijziging wordt automatisch
+          bijgehouden voor statistieken en de grafiek.
+        </p>
 
-        <div class="actions">
-          <button class="btn primary" type="submit">Opslaan</button>
-        </div>
-      </form>
-    </section>
+        <section v-if="recentEvents.length > 0" class="panel" aria-labelledby="history-title">
+          <h3 id="history-title">Geschiedenis</h3>
+          <p class="history-note">Laatste {{ recentEvents.length }} wijzigingen</p>
+          <ul class="history">
+            <li v-for="(event, i) in recentEvents" :key="i">
+              <span class="h-time">{{ eventLabel(event.at) }}</span>
+              <span class="h-delta" :class="event.delta > 0 ? 'plus' : 'minus'">
+                {{ event.delta > 0 ? "+" : "" }}{{ event.delta }}
+              </span>
+            </li>
+          </ul>
+          <button type="button" class="btn danger" @click="emit('clearHistory')">
+            Geschiedenis wissen
+          </button>
+        </section>
 
-    <section v-if="recentEvents.length > 0" class="panel" aria-labelledby="history-title">
-      <h3 id="history-title">Geschiedenis</h3>
-      <p class="history-note">Laatste {{ recentEvents.length }} wijzigingen</p>
-      <ul class="history">
-        <li v-for="(event, i) in recentEvents" :key="i">
-          <span class="h-time">{{ eventLabel(event.at) }}</span>
-          <span class="h-delta" :class="event.delta > 0 ? 'plus' : 'minus'">
-            {{ event.delta > 0 ? "+" : "" }}{{ event.delta }}
-          </span>
-        </li>
-      </ul>
-      <button type="button" class="btn danger" @click="emit('clearHistory')">
-        Geschiedenis wissen
+      </section>
+
+      <section
+        id="panel-settings"
+        v-show="activeTab === 'settings'"
+        class="tab-panel"
+        role="tabpanel"
+        aria-labelledby="tab-settings"
+      >
+        <section class="panel" aria-labelledby="settings-title">
+          <h3 id="settings-title">Instellingen</h3>
+          <form class="form" @submit.prevent="saveSettings">
+            <label class="field">
+              <span>Naam</span>
+              <input v-model="form.name" type="text" maxlength="60" placeholder="Bijv. Bier, Push-ups" />
+            </label>
+
+            <div class="field">
+              <span>Icoon</span>
+              <div class="emoticon-grid">
+                <button
+                  v-for="emoticon in EMOTICONS"
+                  :key="emoticon"
+                  class="emoticon"
+                  :class="{ active: form.icon === emoticon }"
+                  type="button"
+                  :aria-label="`Icoon ${emoticon}`"
+                  @click="pickEmoticon(emoticon)"
+                >
+                  {{ emoticon }}
+                </button>
+              </div>
+              <input v-model="form.icon" type="text" maxlength="16" placeholder="Of typ zelf een icoon" />
+            </div>
+
+            <label class="field">
+              <span>{{ valueLabel }}</span>
+              <input v-model="valueText" type="text" inputmode="numeric" />
+            </label>
+
+            <label class="field">
+              <span>Categorie</span>
+              <select v-model="form.categoryId">
+                <option :value="null">Zonder categorie</option>
+                <option v-for="category in categories" :key="category.id" :value="category.id">
+                  {{ category.name }}
+                </option>
+              </select>
+            </label>
+
+            <div class="field">
+              <span>Start opnieuw op 0</span>
+              <div class="segmented" role="radiogroup" aria-label="Reset cyclus">
+                <button
+                  v-for="(label, mode) in RESET_PERIOD_LABELS"
+                  :key="mode"
+                  type="button"
+                  class="seg"
+                  :class="{ active: form.resetPeriod === mode }"
+                  @click="setResetPeriod(mode)"
+                >
+                  {{ label }}
+                </button>
+              </div>
+              <template v-if="form.resetPeriod !== 'none'">
+                <label class="field-inline">
+                  <span class="sub-label">Periode start (vandaag = begin cyclus)</span>
+                  <input v-model="periodStartText" type="date" />
+                  <button type="button" class="btn ghost small" @click="setPeriodStartNow">
+                    Vandaag
+                  </button>
+                  <button
+                    v-if="periodStartText"
+                    type="button"
+                    class="btn ghost small"
+                    @click="periodStartText = ''"
+                  >
+                    Automatisch
+                  </button>
+                </label>
+                <p class="field-hint">
+                  Zonder datum starten periodes op kalender-grenzen (middernacht / maandag / 1e van de
+                  maand). Een datum verplaatst de grenzen, niets gaat verloren.
+                </p>
+              </template>
+            </div>
+
+            <p v-if="settingsError" class="error" role="alert">{{ settingsError }}</p>
+            <p v-if="savedHint" class="saved" aria-live="polite">{{ savedHint }}</p>
+
+            <div class="actions">
+              <button class="btn primary" type="submit">Opslaan</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel danger-zone">
+          <button type="button" class="btn danger" @click="emit('delete', counter.id)">
+            Teller verwijderen
+          </button>
+        </section>
+      </section>
+    </div>
+
+    <nav class="tabbar" role="tablist" aria-label="Onderdelen van deze teller">
+      <button
+        id="tab-counter"
+        type="button"
+        class="tab"
+        role="tab"
+        aria-controls="panel-counter"
+        :aria-selected="activeTab === 'counter'"
+        :tabindex="activeTab === 'counter' ? 0 : -1"
+        @click="activeTab = 'counter'"
+        @keydown="onTabKeydown($event, 'counter')"
+      >
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0M12 8v8M8 12h8"
+          />
+        </svg>
+        Teller
       </button>
-    </section>
-
-    <section class="panel danger-zone">
-      <button type="button" class="btn danger" @click="emit('delete', counter.id)">
-        Teller verwijderen
+      <button
+        id="tab-stats"
+        type="button"
+        class="tab"
+        role="tab"
+        aria-controls="panel-stats"
+        :aria-selected="activeTab === 'stats'"
+        :tabindex="activeTab === 'stats' ? 0 : -1"
+        @click="activeTab = 'stats'"
+        @keydown="onTabKeydown($event, 'stats')"
+      >
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M4 20V11M10 20V4M16 20v-6M2 20h20"
+          />
+        </svg>
+        Statistieken
       </button>
-    </section>
+      <button
+        id="tab-settings"
+        type="button"
+        class="tab"
+        role="tab"
+        aria-controls="panel-settings"
+        :aria-selected="activeTab === 'settings'"
+        :tabindex="activeTab === 'settings' ? 0 : -1"
+        @click="activeTab = 'settings'"
+        @keydown="onTabKeydown($event, 'settings')"
+      >
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+          <path
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M4 8h16M4 16h16M9 5v6M15 13v6"
+          />
+        </svg>
+        Instellingen
+      </button>
+    </nav>
   </div>
 </template>
 
@@ -714,12 +887,8 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 40;
-  overflow-y: auto;
-  padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1rem 2rem
-    calc(1rem + env(safe-area-inset-right, 0px));
   display: grid;
-  gap: 0.9rem;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
   touch-action: manipulation;
   user-select: none;
@@ -731,6 +900,81 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  padding: calc(0.75rem + env(safe-area-inset-top, 0px))
+    calc(1rem + env(safe-area-inset-right, 0px)) 0.6rem
+    calc(1rem + env(safe-area-inset-left, 0px));
+}
+
+/* Alleen dit vlak scrollt; kop en tabbalk blijven staan. */
+.tab-panels {
+  overflow-y: auto;
+  padding: 0.9rem calc(1rem + env(safe-area-inset-right, 0px)) 1.25rem
+    calc(1rem + env(safe-area-inset-left, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.tab-panel {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+  /* Without this a flex item cannot shrink below its min-content, pushing the
+     whole tab outwards on narrow screens. */
+  min-width: 0;
+}
+
+/* The counting surface fills the area: value centred, buttons within thumb
+   reach. `flex: 1 0 auto` lets it grow but never shrink, so long tabs scroll. */
+.tab-panel.counter {
+  flex: 1 0 auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.tabbar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.25rem;
+  padding: 0.3rem calc(0.5rem + env(safe-area-inset-right, 0px))
+    calc(0.3rem + env(safe-area-inset-bottom, 0px))
+    calc(0.5rem + env(safe-area-inset-left, 0px));
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(2, 6, 23, 0.94);
+}
+
+.tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.2rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.2rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.tab svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.tab:hover {
+  color: #e2e8f0;
+}
+
+.tab[aria-selected="true"] {
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.12);
 }
 
 .back {
@@ -739,8 +983,8 @@ onBeforeUnmount(() => {
   background: rgba(15, 23, 42, 0.6);
   color: #e2e8f0;
   border-radius: 50%;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.75rem;
+  height: 2.75rem;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -783,10 +1027,15 @@ onBeforeUnmount(() => {
 }
 
 .head-value {
-  font-size: 1.6rem;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(2.75rem, 14vw, 3.6rem);
+  line-height: 1;
   font-weight: 800;
+  letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
   color: #f8fafc;
+  overflow-wrap: anywhere;
 }
 
 .stepper {
@@ -902,10 +1151,38 @@ h4 {
   align-items: center;
 }
 
+/* Phones: 24 columns across ~250px gives 9px cells. Let the map scroll with
+   bigger cells and keep the day and total columns pinned. */
+@media (max-width: 30rem) {
+  .heatmap {
+    overflow-x: auto;
+  }
+
+  .hm-row,
+  .hm-bottom {
+    grid-template-columns: 1.5rem 2rem repeat(24, 0.85rem);
+  }
+
+  .hm-day,
+  .hm-row-total {
+    position: sticky;
+    z-index: 1;
+    background: #0d1526;
+  }
+
+  .hm-day {
+    left: 0;
+  }
+
+  .hm-row-total {
+    left: 1.5rem;
+  }
+}
+
 .hm-day {
   font-size: 0.6rem;
   font-weight: 700;
-  color: #64748b;
+  color: #94a3b8;
   text-align: left;
 }
 
@@ -933,13 +1210,18 @@ h4 {
   outline-offset: 1px;
 }
 
+.hm-cell:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 1px;
+}
+
 .hm-bottom {
   margin-top: 2px;
 }
 
 .hm-hour {
   font-size: 0.55rem;
-  color: #64748b;
+  color: #94a3b8;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -966,7 +1248,7 @@ h4 {
   justify-content: flex-end;
   gap: 0.4rem;
   font-size: 0.65rem;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .legend-bar {
@@ -987,6 +1269,7 @@ h4 {
 .nav-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.45rem;
 }
 
@@ -998,8 +1281,8 @@ h4 {
   font: inherit;
   font-size: 1rem;
   font-weight: 700;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: var(--radius-md);
   cursor: pointer;
   display: grid;
@@ -1019,6 +1302,7 @@ h4 {
 
 .nav-range {
   flex: 1;
+  min-width: 0;
   text-align: center;
   font-size: 0.78rem;
   font-weight: 700;
@@ -1034,6 +1318,8 @@ h4 {
 
 .segmented {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 0.25rem;
   padding: 0.2rem;
   background: rgba(2, 6, 23, 0.55);
@@ -1049,7 +1335,8 @@ h4 {
   font: inherit;
   font-size: 0.78rem;
   font-weight: 700;
-  padding: 0.35rem 0.7rem;
+  min-height: 2rem;
+  padding: 0.45rem 0.75rem;
   border-radius: 999px;
   cursor: pointer;
 }
@@ -1119,7 +1406,7 @@ h4 {
 .chart-note {
   margin: 0;
   font-size: 0.75rem;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .no-history {
@@ -1177,20 +1464,36 @@ select option {
 
 .field-inline {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 0.4rem;
   align-items: end;
+}
+
+.field-inline input {
+  min-width: 0;
 }
 
 .field-inline .sub-label {
   grid-column: 1 / -1;
 }
 
+/* A date input plus two buttons does not fit on one phone row: give the date
+   its own line and let the buttons share the next one. */
+@media (max-width: 30rem) {
+  .field-inline {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .field-inline input {
+    grid-column: 1 / -1;
+  }
+}
+
 .field-hint {
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.45;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .emoticon-grid {
@@ -1206,6 +1509,7 @@ select option {
   border-radius: var(--radius-md);
   font-size: 1.15rem;
   line-height: 1;
+  min-height: 2.5rem;
   padding: 0.45rem 0;
   cursor: pointer;
 }
@@ -1277,6 +1581,7 @@ select option {
   appearance: none;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
+  min-height: 2.5rem;
   padding: 0.55rem 1rem;
   font: inherit;
   font-size: 0.85rem;
@@ -1289,6 +1594,7 @@ select option {
 }
 
 .btn.small {
+  min-height: 2.25rem;
   padding: 0.45rem 0.7rem;
   font-size: 0.78rem;
 }
@@ -1328,7 +1634,7 @@ select option {
 .history-note {
   margin: 0;
   font-size: 0.78rem;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .history {
