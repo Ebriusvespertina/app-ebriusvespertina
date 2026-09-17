@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 import Die from "./Die.vue";
 import MiniDie from "./MiniDie.vue";
 import { lockedCount, lockedTotal, rollDieValue } from "./diceEngine";
@@ -8,6 +8,7 @@ import type { Die as DieModel, DieValue, RollLogEntry } from "./types";
 const ROLL_DURATION_MS = 380;
 const ROLL_LOG_LIMIT = 50;
 const DICE_COUNT = 6;
+const COOLDOWN_SECONDS = 3;
 
 const lockByValue = ref(true);
 
@@ -28,6 +29,58 @@ const isRolling = ref(false);
 const hasLocked = computed(() => dice.value.some((die) => die.locked));
 const allTotal = computed(() => dice.value.reduce((sum, die) => sum + die.value, 0));
 const totalValue = computed(() => lockedTotal(dice.value));
+const canRoll = computed(() => dice.value.some((die) => !die.locked));
+const freeDice = computed(() => dice.value.filter((die) => !die.locked));
+
+/* De ronde is klaar, of eindigt met nog één tik: bij ≤1 vrije steen, of — met
+   "gelijke ogen samen" aan — als alle vrije stenen dezelfde waarde tonen, want
+   dan vergrendelt één tik de hele groep (2, 3 of zelfs 6 stenen). */
+const nearRoundEnd = computed(() => {
+  if (freeDice.value.length <= 1) {
+    return true;
+  }
+
+  const first = freeDice.value[0]?.value;
+  return (
+    lockByValue.value &&
+    first !== undefined &&
+    freeDice.value.every((die) => die.value === first)
+  );
+});
+
+/* Zodra de ronde klaar is of met één tik kan eindigen, is een tweede tik op
+   Gooien of Reset bijna altijd een mis-tik: die gooit het resultaat weg waar je
+   net naar keek. Beide knoppen gaan daarom 3 seconden op slot. */
+const cooldownRemaining = ref(0);
+let cooldownTimer: number | undefined;
+
+const rollLabel = computed(() => {
+  if (isRolling.value) {
+    return "Gooien…";
+  }
+  return cooldownRemaining.value > 0 ? `Wachten… ${cooldownRemaining.value}` : "Gooien";
+});
+
+function stopCooldown() {
+  if (cooldownTimer !== undefined) {
+    window.clearInterval(cooldownTimer);
+    cooldownTimer = undefined;
+  }
+  cooldownRemaining.value = 0;
+}
+
+function startCooldown() {
+  stopCooldown();
+  cooldownRemaining.value = COOLDOWN_SECONDS;
+  cooldownTimer = window.setInterval(() => {
+    cooldownRemaining.value -= 1;
+    if (cooldownRemaining.value <= 0) {
+      stopCooldown();
+    }
+  }, 1000);
+}
+
+onUnmounted(stopCooldown);
 
 const rollLog = ref<RollLogEntry[]>([]);
 const rollCounter = ref(0);
@@ -73,19 +126,22 @@ function toggleLock(id: number) {
         other.lockGroup = null;
       }
     }
-    return;
+  } else {
+    const group = nextLockGroup;
+    nextLockGroup += 1;
+
+    const targets = lockByValue.value
+      ? dice.value.filter((other) => !other.locked && other.value === die.value)
+      : [die];
+
+    for (const target of targets) {
+      target.locked = true;
+      target.lockGroup = group;
+    }
   }
 
-  const group = nextLockGroup;
-  nextLockGroup += 1;
-
-  const targets = lockByValue.value
-    ? dice.value.filter((other) => !other.locked && other.value === die.value)
-    : [die];
-
-  for (const target of targets) {
-    target.locked = true;
-    target.lockGroup = group;
+  if (nearRoundEnd.value) {
+    startCooldown();
   }
 }
 
@@ -125,6 +181,10 @@ function rollDice() {
 
     rollingIds.value = new Set();
     isRolling.value = false;
+
+    if (nearRoundEnd.value) {
+      startCooldown();
+    }
   }, ROLL_DURATION_MS);
 }
 
@@ -134,6 +194,7 @@ function clearLocks() {
     die.lockGroup = null;
   }
 
+  stopCooldown();
   rollLog.value = [];
   rollCounter.value = 0;
 }
@@ -141,11 +202,7 @@ function clearLocks() {
 
 <template>
   <main class="page">
-    <section class="hero" aria-labelledby="page-title">
-      <div class="eyebrow">Dispuut Ebrius Vespertina</div>
-      <h1 id="page-title">Dobbelstenen</h1>
-      <p>Gooi de stenen, vergrendel wat je wilt houden en gooi de rest opnieuw. Doel: boven de 30.</p>
-    </section>
+    <h1 class="sr-only">Dobbelstenen</h1>
 
     <section class="game-layout" aria-label="Dobbelspel">
       <div class="score-card">
@@ -172,17 +229,19 @@ function clearLocks() {
           </label>
         </div>
 
-        <div class="dice-grid" :class="{ inert: isRolling }">
-          <Die
-            v-for="die in dice"
-            :key="die.id"
-            :id="die.id"
-            :value="die.value"
-            :locked="die.locked"
-            :rolling="rollingIds.has(die.id)"
-            @toggle-lock="toggleLock"
-            @roll-end="rollingIds.delete(die.id)"
-          />
+        <div class="dice-area">
+          <div class="dice-grid" :class="{ inert: isRolling }">
+            <Die
+              v-for="die in dice"
+              :key="die.id"
+              :id="die.id"
+              :value="die.value"
+              :locked="die.locked"
+              :rolling="rollingIds.has(die.id)"
+              @toggle-lock="toggleLock"
+              @roll-end="rollingIds.delete(die.id)"
+            />
+          </div>
         </div>
 
         <div class="btn-row">
@@ -190,12 +249,17 @@ function clearLocks() {
             class="btn-primary"
             id="rollBtn"
             type="button"
-            :disabled="isRolling"
+            :disabled="isRolling || cooldownRemaining > 0 || !canRoll"
             @click="rollDice"
           >
-            {{ isRolling ? "Gooien…" : "Gooien" }}
+            {{ rollLabel }}
           </button>
-          <button class="btn-secondary" type="button" @click="clearLocks">
+          <button
+            class="btn-secondary"
+            type="button"
+            :disabled="isRolling || cooldownRemaining > 0"
+            @click="clearLocks"
+          >
             Reset
           </button>
         </div>
@@ -234,61 +298,39 @@ function clearLocks() {
 <style scoped>
 .page {
   box-sizing: border-box;
+  --page-pad: 1rem;
   max-width: 72rem;
   margin: 0 auto;
-  padding: 1rem;
+  padding: var(--page-pad);
   display: grid;
   gap: 1rem;
   align-content: start;
-  min-height: 100dvh;
 }
 
 @media (min-width: 48rem) {
   .page {
-    padding: 1.5rem;
+    --page-pad: 1.5rem;
     gap: 1.25rem;
   }
 }
 
-.hero {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.75rem 0.1rem 0.25rem;
-}
-
-.eyebrow {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #34d399;
-}
-
-h1 {
-  margin: 0;
-  font-size: clamp(2.1rem, 6vw, 3.6rem);
-  line-height: 0.98;
-  letter-spacing: -0.05em;
-  color: #f8fafc;
-}
-
-.hero p {
-  margin: 0;
-  max-width: 42rem;
-  font-size: 0.98rem;
-  line-height: 1.6;
-  color: #94a3b8;
-}
-
+/* Score en speelveld vullen samen precies één scherm, zodat de knoppen zonder
+   scrollen bereikbaar zijn. Safe-area en pagina-padding tellen daar niet in mee. */
 .game-layout {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 1rem;
+  min-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+      2 * var(--page-pad)
+  );
 }
 
 @media (min-width: 48rem) {
   .game-layout {
     grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr);
-    align-items: start;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 1.25rem;
   }
 }
 
@@ -303,7 +345,7 @@ h1 {
 
 .score-card {
   box-sizing: border-box;
-  padding: 1.25rem;
+  padding: 1rem 1.25rem;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
@@ -311,14 +353,16 @@ h1 {
 
 @media (min-width: 48rem) {
   .score-card {
-    position: sticky;
-    top: 1.5rem;
+    padding: 1.25rem;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: center;
+    gap: 1.75rem;
   }
 }
 
 .stat {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.2rem;
 }
 
 .stat-label {
@@ -330,10 +374,10 @@ h1 {
 }
 
 .stat-value {
-  font-size: clamp(2.2rem, 10vw, 3.6rem);
-  line-height: 0.92;
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  line-height: 0.95;
   font-weight: 800;
-  letter-spacing: -0.08em;
+  letter-spacing: -0.06em;
   color: #f8fafc;
   font-variant-numeric: tabular-nums;
 }
@@ -346,6 +390,7 @@ h1 {
   box-sizing: border-box;
   padding: 1rem;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 1rem;
 }
 
@@ -360,7 +405,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6rem 1rem;
   flex-wrap: wrap;
 }
 
@@ -427,25 +472,38 @@ h1 {
   box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
 }
 
-.dice-grid {
+.dice-area {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dice-grid {
+  --gap: clamp(0.4rem, 1.4vmin, 0.85rem);
+  --status-h: 1.3rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, auto);
+  gap: var(--gap);
+  width: 100%;
 }
 
 .dice-grid.inert {
   pointer-events: none;
 }
 
-@media (min-width: 30rem) {
-  .dice-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+/* Altijd 3×2, met de grootste steen die in het speelveld past. */
+@supports (container-type: size) {
+  .dice-area {
+    container-type: size;
   }
-}
 
-@media (min-width: 48rem) {
   .dice-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    --cell-w: calc((100cqw - 2 * var(--gap)) / 3);
+    --cell-h: max(0px, calc((100cqh - var(--gap)) / 2 - var(--status-h)));
+    width: auto;
+    grid-template-columns: repeat(3, min(var(--cell-w), var(--cell-h)));
   }
 }
 
@@ -481,18 +539,28 @@ h1 {
   box-shadow: 0 10px 24px rgba(16, 185, 129, 0.24);
 }
 
-.btn-primary:hover {
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 2px;
+}
+
+.btn-primary:hover:not(:disabled) {
   box-shadow: 0 12px 30px rgba(16, 185, 129, 0.32);
 }
 
-.btn-primary:active,
-.btn-secondary:active {
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled) {
   transform: translateY(1px) scale(0.99);
 }
 
-.btn-primary:disabled {
+.btn-primary:disabled,
+.btn-secondary:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.btn-primary:disabled {
   box-shadow: none;
 }
 
@@ -503,7 +571,7 @@ h1 {
   border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   color: #f8fafc;
   border-color: rgba(148, 163, 184, 0.35);
 }
@@ -607,5 +675,17 @@ h1 {
   padding: 0.75rem 0;
   font-size: 0.86rem;
   color: #94a3b8;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

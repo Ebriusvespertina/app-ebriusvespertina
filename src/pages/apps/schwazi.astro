@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SchwaziPage from '../../components/apps/schwazi/SchwaziPage.vue';
+---
+
+<BaseLayout
+	title="Schwazi"
+	description="Iedereen legt een vinger op het scherm en de app kiest: één persoon, meerdere, nummers of teams."
+	appleTitle="Schwazi"
+	background="radial-gradient(circle at top left, rgba(244, 114, 182, 0.16), transparent 30%), radial-gradient(circle at 85% 0%, rgba(56, 189, 248, 0.14), transparent 28%), linear-gradient(180deg, #0f172a 0%, #020617 100%)"
+>
+	<SchwaziPage client:only="vue" />
+</BaseLayout>

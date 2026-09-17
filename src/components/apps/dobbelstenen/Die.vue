@@ -67,6 +67,16 @@ function toggleLock() {
   color: inherit;
   width: 100%;
   justify-self: stretch;
+  container-type: inline-size;
+}
+
+.die-wrapper:focus-visible {
+  outline: none;
+}
+
+.die-wrapper:focus-visible .die {
+  border-color: rgba(52, 211, 153, 0.7);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.28);
 }
 
 .die {
@@ -192,5 +202,12 @@ function toggleLock() {
 
 .die-status.is-locked {
   color: #34d399;
+}
+
+/* Kleinere stenen (bv. telefoon in landschap) hebben geen ruimte voor het label. */
+@container (max-width: 4.75rem) {
+  .die-status {
+    display: none;
+  }
 }
 </style>

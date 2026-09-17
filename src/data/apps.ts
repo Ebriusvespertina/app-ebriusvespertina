@@ -49,6 +49,14 @@ export const apps: AppItem[] = [
     accent: "#f87171",
   },
   {
+    name: "Schwazi",
+    description: "Iedereen een vinger op het scherm, de app kiest — persoon, nummer of team.",
+    maker: "Henkie",
+    href: "/apps/schwazi",
+    icon: "lucide:circle-dot",
+    accent: "#f472b6",
+  },
+  {
     name: "Tellers",
     description: "Houd alles bij: biertjes, shotjes, push-ups of kilometers.",
     maker: "Henkie",

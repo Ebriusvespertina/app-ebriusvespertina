@@ -140,46 +140,13 @@ function tickActiveOption() {
     return;
   }
 
-  const now = performance.now();
-  const dt = lastTickTime === 0 ? 0 : now - lastTickTime;
-  lastTickTime = now;
-
   const rotation = getRotationFromElement(wheelRotorRef.value);
-  applyMotionBlur(rotation, dt);
-
   const active = getActiveLabelAtRotation(rotation);
   if (active) {
     emit("activeOption", active);
   }
 
   rafId = requestAnimationFrame(tickActiveOption);
-}
-
-const MAX_BLUR = 1.3;
-let lastRotatedDeg = 0;
-let lastTickTime = 0;
-
-/**
- * Radial motion blur: the faster the rotor turns, the stronger the blur,
- * fading to none as it decelerates so the winner lands crisp.
- */
-function applyMotionBlur(rotationDeg: number, dtMs: number) {
-  if (!wheelRotorRef.value) {
-    return;
-  }
-  let delta = rotationDeg - lastRotatedDeg;
-  if (delta > 180) {
-    delta -= 360;
-  }
-  if (delta < -180) {
-    delta += 360;
-  }
-  lastRotatedDeg = rotationDeg;
-
-  const speedDegMs = dtMs > 0 ? Math.abs(delta) / dtMs : 0;
-  // ~0.9 deg/ms (fast phase) maps to the max blur; near-still stays sharp.
-  const blur = Math.min(MAX_BLUR, speedDegMs * 1.45);
-  wheelRotorRef.value.style.filter = blur > 0.03 ? `blur(${blur.toFixed(2)}px)` : "";
 }
 
 watch(
@@ -189,8 +156,6 @@ watch(
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }
-      lastRotatedDeg = 0;
-      lastTickTime = 0;
       rafId = requestAnimationFrame(tickActiveOption);
       return;
     }
@@ -198,9 +163,6 @@ watch(
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
       rafId = null;
-    }
-    if (wheelRotorRef.value) {
-      wheelRotorRef.value.style.filter = "";
     }
   },
 );
@@ -214,6 +176,38 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="wheel-box">
+    <svg class="filter-defs" viewBox="0 0 100 100" aria-hidden="true">
+      <defs>
+        <filter
+          id="wheel-zoom-blur"
+          x="-20%"
+          y="-20%"
+          width="140%"
+          height="140%"
+          color-interpolation-filters="sRGB"
+        >
+          <feGaussianBlur stdDeviation="1.1" result="blur" />
+          <feTransformMatrix
+            type="matrix"
+            values="1.03 0 0 1.03 -1.5 -1.5"
+            in="blur"
+            result="scale1"
+          />
+          <feTransformMatrix
+            type="matrix"
+            values="1.06 0 0 1.06 -3 -3"
+            in="blur"
+            result="scale2"
+          />
+          <feMerge>
+            <feMergeNode in="SourceGraphic" />
+            <feMergeNode in="blur" />
+            <feMergeNode in="scale1" />
+            <feMergeNode in="scale2" />
+          </feMerge>
+        </filter>
+      </defs>
+    </svg>
     <svg class="pointer" viewBox="0 0 36 30" aria-hidden="true">
       <path
         d="M18 29 C13.5 20.5 5 14 2.5 8 C1.8 4.5 4 2 7.5 2.6 L18 5.5 L28.5 2.6 C32 2 34.2 4.5 33.5 8 C31 14 22.5 20.5 18 29 Z"
@@ -232,9 +226,11 @@ onBeforeUnmount(() => {
       <div
         ref="wheelRotorRef"
         class="wheel-rotor"
+        :class="{ spinning }"
         :style="{
           transform: `rotate(${rotation}deg)`,
           transitionDuration: `${spinning ? spinDurationMs : 0}ms`,
+          animationDuration: spinning ? `${spinDurationMs}ms` : undefined,
         }"
         @transitionend="onTransitionEnd"
       >
@@ -261,6 +257,25 @@ onBeforeUnmount(() => {
             </text>
           </g>
         </svg>
+        <svg
+          v-if="spinning"
+          class="wheel-svg wheel-blur-layer"
+          viewBox="0 0 100 100"
+          aria-hidden="true"
+          :style="{
+            animationDuration: `${spinDurationMs}ms`,
+          }"
+        >
+          <g v-for="segment in segments" :key="segment.key">
+            <path
+              :d="segment.path"
+              :fill="segment.color"
+              stroke="#0f172a"
+              stroke-width="1"
+              stroke-linejoin="round"
+            />
+          </g>
+        </svg>
       </div>
       <span class="wheel-hub" aria-hidden="true"></span>
       <span class="wheel-shine" aria-hidden="true"></span>
@@ -285,6 +300,13 @@ onBeforeUnmount(() => {
   min-width: 0;
   aspect-ratio: 1;
   margin-inline: auto;
+}
+
+.filter-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 .pointer {
@@ -331,6 +353,33 @@ onBeforeUnmount(() => {
   transition: transform 4.6s cubic-bezier(0.15, 0.8, 0.1, 1);
 }
 
+/* Radial (zoom) blur: a copy of the segments only — no labels — is smeared
+   outward with an SVG feGaussianBlur + scaled-layer filter while the wheel
+   spins fast, then fades out as it decelerates. Labels stay crisp because
+   they only exist on the sharp base layer. */
+.wheel-blur-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  filter: url(#wheel-zoom-blur);
+}
+
+.wheel-rotor.spinning .wheel-blur-layer {
+  animation-name: wheel-zoom-fade;
+  animation-timing-function: cubic-bezier(0.15, 0.8, 0.1, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes wheel-zoom-fade {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .wheel-svg {
   width: 100%;
   height: 100%;
@@ -373,7 +422,11 @@ onBeforeUnmount(() => {
   pointer-events: none;
   z-index: 2;
   background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.16), transparent 42%),
+    radial-gradient(
+      circle at 32% 26%,
+      rgba(255, 255, 255, 0.16),
+      transparent 42%
+    ),
     radial-gradient(circle at 72% 82%, rgba(2, 6, 23, 0.3), transparent 55%);
 }
 
