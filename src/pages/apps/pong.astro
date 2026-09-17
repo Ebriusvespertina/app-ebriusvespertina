@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PongPage from '../../components/apps/pong/PongPage.vue';
+---
+
+<BaseLayout
+	title="Pong"
+	description="Twee spelers, één telefoon: boven tegen onder. Tik links of rechts in jouw helft om te bewegen, kies best of 3, best of 5 of eindeloos door."
+	appleTitle="Pong"
+	background="radial-gradient(circle at 15% 0%, rgba(56, 189, 248, 0.14), transparent 30%), radial-gradient(circle at 85% 100%, rgba(244, 114, 182, 0.13), transparent 30%), linear-gradient(180deg, #0f172a 0%, #020617 100%)"
+>
+	<PongPage client:only="vue" />
+</BaseLayout>

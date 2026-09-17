@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { Icon } from "@iconify/vue";
 import type { Choice } from "./types";
-import { percentages, clampWeight, totalWeight } from "./wheelEngine";
+import { percentages, clampWeight, parseWeightInput, totalWeight } from "./wheelEngine";
 
 const props = defineProps<{
   choices: Choice[];
@@ -14,6 +14,7 @@ const emit = defineEmits<{
   updateLabel: [id: string, label: string];
   updateWeight: [id: string, weight: number];
   removeChoice: [id: string];
+  moveChoice: [id: string, direction: -1 | 1];
 }>();
 
 const shares = computed(() => percentages(props.choices));
@@ -30,8 +31,7 @@ function onLabelInput(id: string, value: string) {
 }
 
 function onWeightInput(id: string, value: string) {
-  const parsed = value.trim() === "" ? 1 : Number(value);
-  emit("updateWeight", id, clampWeight(parsed, 0));
+  emit("updateWeight", id, clampWeight(parseWeightInput(value), 0));
 }
 </script>
 
@@ -58,6 +58,26 @@ function onWeightInput(id: string, value: string) {
         "
         placeholder="Win optie"
       />
+      <button
+        class="reorder-btn move-up"
+        type="button"
+        :disabled="disabled || index === 0"
+        :aria-label="`${choice.label} omhoog verplaatsen`"
+        title="Omhoog"
+        @click="emit('moveChoice', choice.id, -1)"
+      >
+        <Icon icon="lucide:chevron-up" width="16" height="16" aria-hidden="true" />
+      </button>
+      <button
+        class="reorder-btn move-down"
+        type="button"
+        :disabled="disabled || index === choices.length - 1"
+        :aria-label="`${choice.label} omlaag verplaatsen`"
+        title="Omlaag"
+        @click="emit('moveChoice', choice.id, 1)"
+      >
+        <Icon icon="lucide:chevron-down" width="16" height="16" aria-hidden="true" />
+      </button>
       <input
         class="item-input weight-input"
         type="number"
@@ -98,7 +118,7 @@ function onWeightInput(id: string, value: string) {
   padding: 0.2rem 0;
   margin: 0;
   display: grid;
-  grid-template-columns: 0.85rem minmax(0, 1fr) 2.75rem;
+  grid-template-columns: 0.85rem minmax(0, 1fr) 1.9rem 1.9rem 2.75rem;
   gap: 0;
   border-radius: 0.8rem;
   background: rgba(15, 23, 42, 0.32);
@@ -113,10 +133,10 @@ hr {
 .item {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: 0.85rem minmax(0, 1fr) 2.75rem;
+  grid-template-columns: 0.85rem minmax(0, 1fr) 1.9rem 1.9rem 2.75rem;
   grid-template-areas:
-    "dot label remove"
-    ". weight percent";
+    "dot label up down remove"
+    ". weight percent . .";
   gap: 0.35rem;
   align-items: stretch;
   padding: 0.4rem;
@@ -179,15 +199,13 @@ hr {
   justify-self: end;
 }
 
+.reorder-btn,
 .remove {
-  grid-area: remove;
   appearance: none;
   border: 1px solid transparent;
   background: transparent;
   color: #94a3b8;
   border-radius: 0.5rem;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -199,8 +217,46 @@ hr {
     border-color 0.15s ease;
 }
 
+.reorder-btn {
+  min-height: 2.25rem;
+}
+
+.move-up {
+  grid-area: up;
+}
+
+.move-down {
+  grid-area: down;
+}
+
+.reorder-btn :deep(svg),
 .remove :deep(svg) {
   display: block;
+}
+
+.reorder-btn:hover:not(:disabled),
+.reorder-btn:focus-visible,
+.remove:hover,
+.remove:focus-visible {
+  color: #f8fafc;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.reorder-btn:active:not(:disabled),
+.remove:active {
+  background: rgba(148, 163, 184, 0.24);
+}
+
+.reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.remove {
+  grid-area: remove;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
 }
 
 .remove:hover,
@@ -214,25 +270,20 @@ hr {
   background: rgba(251, 113, 133, 0.22);
 }
 
-@supports (grid-template-columns: subgrid) {
-  .item {
-    grid-template-columns: subgrid;
-  }
-}
-
 @media (min-width: 36rem) {
   .list {
-    grid-template-columns: 0.85rem minmax(0, 1fr) 5.2rem 4.1rem 2.25rem;
+    grid-template-columns: 0.85rem minmax(0, 1fr) 1.9rem 1.9rem 5.2rem 4.1rem 2.25rem;
   }
 
   .item {
-    grid-template-columns: 0.85rem minmax(0, 1fr) 5.2rem 4.1rem 2.25rem;
-    grid-template-areas: "dot label weight percent remove";
+    grid-template-columns: 0.85rem minmax(0, 1fr) 1.9rem 1.9rem 5.2rem 4.1rem 2.25rem;
+    grid-template-areas: "dot label up down weight percent remove";
     gap: 0.45rem;
     align-items: center;
     padding: 0.42rem 0.45rem;
   }
 
+  .reorder-btn,
   .remove {
     min-width: 2.25rem;
     min-height: 2.25rem;
@@ -245,11 +296,11 @@ hr {
 
 @media (max-width: 22rem) {
   .list {
-    grid-template-columns: 0.78rem minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 0.78rem minmax(0, 1fr) 1.7rem 1.7rem 2.5rem;
   }
 
   .item {
-    grid-template-columns: 0.78rem minmax(0, 1fr) 2.5rem;
+    grid-template-columns: 0.78rem minmax(0, 1fr) 1.7rem 1.7rem 2.5rem;
   }
 
   .percent {

@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TimingPage from '../../components/apps/timing/TimingPage.vue';
+---
+
+<BaseLayout
+	title="Timing"
+	description="Twee spelers, één telefoon. Tik op het juiste moment: reflex bij 0, de skill check met ronddraaiende stip, of tel blind van 20 naar 0."
+	appleTitle="Timing"
+	background="radial-gradient(circle at 15% 0%, rgba(52, 211, 153, 0.14), transparent 30%), radial-gradient(circle at 85% 100%, rgba(167, 139, 250, 0.13), transparent 30%), linear-gradient(180deg, #0f172a 0%, #020617 100%)"
+>
+	<TimingPage client:only="vue" />
+</BaseLayout>

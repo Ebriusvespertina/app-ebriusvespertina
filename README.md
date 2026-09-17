@@ -8,9 +8,10 @@ Een statische PWA gebouwd met [Astro](https://astro.build) en [Vue 3](https://vu
 | App | Route | Omschrijving |
 | --- | --- | --- |
 | Dobbelstenen | `/apps/dobbelstenen` | Dertigen: gooi 6 stenen, vergrendel wat je wilt houden, doel boven de 30. |
-| Radje draaien | `/apps/radje-draaien` | Keuzes met gewichten op een rad, met geschiedenis (opgeslagen per toestel). |
+| Radje draaien | `/apps/radje-draaien` | Keuzes met gewichten op een rad, presets met import/export en instellingen (opgeslagen per toestel). |
 | Bakken Timer | `/apps/bakken-timer` | Houd vast om te starten, laat los zodra je drinkt, tik weer als de bak leeg is. Record en log per toestel. |
 | Tellers | `/apps/tellers` | Meerdere tellers in categorieën, tellen met tikken of vasthouden, statistieken en grafieken per teller, backup via import/export (JSON). |
+| Pong | `/apps/pong` | Twee spelers op één telefoon: boven tegen onder. Tik links of rechts in jouw helft om de paddle te bewegen; de score loopt eindeloos door. |
 
 ## Structuur
 
@@ -49,4 +50,4 @@ Vereist Node >= 22 en pnpm 11 (zie `packageManager`). Bij een verse clone draait
 
 ## PWA
 
-De PWA wordt geregistreerd via `PwaRegister.astro` (in `BaseLayout`). Icoontjes in `public/icons/` kun je opnieuw genereren met `node scripts/generate-icons.mjs` (bron: `public/logo-dev.svg`). De manifest- en service-worker-config staat in `astro.config.mjs`.
+De PWA wordt geregistreerd via `PwaRegister.astro` (in `BaseLayout`). Icoontjes in `public/icons/` en de favicons (`public/favicon.svg`, `public/favicon.ico`) kun je opnieuw genereren met `node scripts/generate-icons.mjs` (bron: `public/logo-dev.svg`). De manifest- en service-worker-config staat in `astro.config.mjs`.

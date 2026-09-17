@@ -12,7 +12,6 @@ import {
   createCounter,
   emptyState,
   exportFilename,
-  historySeries,
   incrementCounter,
   parseState,
   removeCategory,
@@ -23,6 +22,15 @@ import {
   totals,
   uncategorizedCounters,
   updateCounter,
+  createTestCounter,
+  effectiveValue,
+  periodRows,
+  periodStartAt,
+  weekdayHourCounts,
+  DAY_MS,
+  bucketStarts,
+  historyWindow,
+  valueAt,
 } from "./countersEngine";
 
 function stateWith(counts: Array<{ name: string; value: number }>): CountersState {
@@ -171,14 +179,6 @@ describe("history recording", () => {
     expect(next.counters[0].history).toEqual([]);
   });
 
-  it("does not record when tracking is off", () => {
-    const state = emptyState();
-    state.counters.push(createCounter("Bier", { value: 0, trackHistory: false }));
-    const next = incrementCounter(state, state.counters[0].id, 1);
-    expect(next.counters[0].value).toBe(1);
-    expect(next.counters[0].history).toEqual([]);
-  });
-
   it("updateCounter records the applied set-delta", () => {
     const state = stateWith([{ name: "Bier", value: 5 }]);
     const id = state.counters[0].id;
@@ -204,13 +204,10 @@ describe("history recording", () => {
     );
   });
 
-  it("starts recording after tracking is enabled", () => {
+  it("starts recording immediately (history is always on)", () => {
     let state = emptyState();
-    state.counters.push(createCounter("Bier", { value: 0, trackHistory: false }));
+    state.counters.push(createCounter("Bier", { value: 0 }));
     const id = state.counters[0].id;
-    state = incrementCounter(state, id, 1);
-    expect(state.counters[0].history).toEqual([]);
-    state = updateCounter(state, id, { trackHistory: true });
     state = incrementCounter(state, id, 1);
     expect(state.counters[0].history).toHaveLength(1);
   });
@@ -227,7 +224,7 @@ describe("history recording", () => {
 
 describe("counterStats", () => {
   it("sums plus/minus deltas and counts events", () => {
-    const counter = createCounter("Bier", { value: 3, trackHistory: true });
+    const counter = createCounter("Bier", { value: 3 });
     counter.history = [
       { at: new Date(2026, 7, 1, 10, 0).toISOString(), delta: 2 },
       { at: new Date(2026, 7, 1, 11, 0).toISOString(), delta: -1 },
@@ -243,7 +240,7 @@ describe("counterStats", () => {
   });
 
   it("finds the busiest day and hour by event count", () => {
-    const counter = createCounter("Bier", { trackHistory: true });
+    const counter = createCounter("Bier", {});
     counter.history = [
       { at: new Date(2026, 7, 1, 10, 0).toISOString(), delta: 1 },
       { at: new Date(2026, 7, 1, 11, 0).toISOString(), delta: 1 },
@@ -264,42 +261,264 @@ describe("counterStats", () => {
   });
 });
 
-describe("historySeries", () => {
-  it("returns an empty series for no history", () => {
-    const counter = createCounter("Bier", { value: 7 });
-    expect(historySeries(counter)).toEqual({ anchor: 7, points: [] });
+describe("valueAt / historyWindow", () => {
+  it("valueAt returns the lifetime cumulative for continuous counters", () => {
+    const counter = createCounter("Bier", { value: 4 });
+    counter.history = [
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 1 },
+      { at: new Date(2026, 7, 10, 12, 0).toISOString(), delta: 2 },
+    ];
+    counter.value = 7;
+    expect(valueAt(counter, new Date(2026, 7, 10, 9, 0).getTime())).toBe(4);
+    expect(valueAt(counter, new Date(2026, 7, 10, 11, 0).getTime())).toBe(5);
+    expect(valueAt(counter, new Date(2026, 7, 10, 13, 0).getTime())).toBe(7);
   });
 
-  it("buckets long spans per day with a correct anchor", () => {
-    const counter = createCounter("Bier", { value: 10, trackHistory: true });
+  it("historyWindow buckets events and values by precision", () => {
+    const counter = createCounter("Bier", {});
+    counter.value = 5;
     counter.history = [
-      { at: new Date(2026, 7, 1, 10, 0).toISOString(), delta: 2 },
-      { at: new Date(2026, 7, 1, 22, 0).toISOString(), delta: 1 },
-      { at: new Date(2026, 7, 5, 9, 0).toISOString(), delta: -3 },
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 2 },
+      { at: new Date(2026, 7, 10, 10, 30).toISOString(), delta: 1 },
+      { at: new Date(2026, 7, 10, 12, 0).toISOString(), delta: 2 },
     ];
-    const series = historySeries(counter);
-    // value at first event = 10 - (2+1-3) = 10
-    expect(series.anchor).toBe(10);
-    expect(series.points).toEqual([
-      { key: "2026-08-01", cumulative: 13 },
-      { key: "2026-08-05", cumulative: 10 },
-    ]);
+    const from = new Date(2026, 7, 10, 9, 0).getTime();
+    const to = new Date(2026, 7, 10, 13, 0).getTime();
+    const pts = historyWindow(counter, from, to, "1h");
+    expect(pts).toHaveLength(4);
+    expect(pts[0].events).toBe(0);
+    expect(pts[0].value).toBe(0);
+    expect(pts[1].events).toBe(2);
+    expect(pts[1].value).toBe(3);
+    expect(pts[3].events).toBe(1);
+    expect(pts[3].value).toBe(5);
   });
 
-  it("buckets short spans per hour", () => {
-    const counter = createCounter("Bier", { value: 4, trackHistory: true });
+  it("historyWindow shows the per-period sawtooth for daily-reset counters", () => {
+    const counter = createCounter("Bier", { resetPeriod: "day" });
+    counter.value = 6;
     counter.history = [
-      { at: new Date(2026, 7, 1, 10, 0).toISOString(), delta: 1 },
-      { at: new Date(2026, 7, 1, 11, 30).toISOString(), delta: 2 },
-      { at: new Date(2026, 7, 1, 12, 15).toISOString(), delta: -1 },
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 2 },
+      { at: new Date(2026, 7, 10, 22, 0).toISOString(), delta: 1 },
+      { at: new Date(2026, 7, 11, 9, 0).toISOString(), delta: 3 },
     ];
-    const series = historySeries(counter);
-    expect(series.anchor).toBe(2);
-    expect(series.points).toEqual([
-      { key: "2026-08-01T10", cumulative: 3 },
-      { key: "2026-08-01T11", cumulative: 5 },
-      { key: "2026-08-01T12", cumulative: 4 },
-    ]);
+    const from = new Date(2026, 7, 10, 0, 0).getTime();
+    const to = new Date(2026, 7, 12, 0, 0).getTime();
+    const pts = historyWindow(counter, from, to, "1d");
+    expect(pts.map((p) => p.value)).toEqual([3, 3]);
+    expect(pts[0].events).toBe(2);
+    expect(pts[1].events).toBe(1);
+  });
+
+  it("aggregates coarser buckets for periodic counters (week view of a daily counter)", () => {
+    const counter = createCounter("Bier", { resetPeriod: "day" });
+    counter.value = 10;
+    counter.history = [
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 2 }, // ma
+      { at: new Date(2026, 7, 10, 22, 0).toISOString(), delta: 1 }, // ma
+      { at: new Date(2026, 7, 11, 9, 0).toISOString(), delta: 3 }, // di
+      { at: new Date(2026, 7, 16, 9, 0).toISOString(), delta: 4 }, // zo
+    ];
+    const from = new Date(2026, 7, 10).getTime();
+    const to = new Date(2026, 7, 17).getTime();
+    const pts = historyWindow(counter, from, to, "1w");
+    expect(pts).toHaveLength(1);
+    // Week totaal (10), niet alleen de waarde op zondag (4).
+    expect(pts[0].value).toBe(10);
+    expect(pts[0].events).toBe(4);
+  });
+
+  it("keeps the running period value for finer buckets", () => {
+    const counter = createCounter("Bier", { resetPeriod: "day" });
+    counter.value = 3;
+    counter.history = [
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 2 },
+      { at: new Date(2026, 7, 10, 22, 0).toISOString(), delta: 1 },
+    ];
+    const from = new Date(2026, 7, 10, 0, 0).getTime();
+    const to = new Date(2026, 7, 11, 0, 0).getTime();
+    const pts = historyWindow(counter, from, to, "1h");
+    expect(pts).toHaveLength(24);
+    expect(pts[10].value).toBe(2); // 10:00 uur: dagwaarde
+    expect(pts[23].value).toBe(3); // einde van de dag: dagtotaal
+  });
+
+  it("never aggregates for continuous counters", () => {
+    const counter = createCounter("Bier", {});
+    counter.value = 7;
+    counter.history = [
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 2 },
+      { at: new Date(2026, 7, 16, 10, 0).toISOString(), delta: 5 },
+    ];
+    const from = new Date(2026, 7, 10).getTime();
+    const to = new Date(2026, 7, 17).getTime();
+    const pts = historyWindow(counter, from, to, "1w");
+    expect(pts[0].value).toBe(7); // cumulatief aan het einde van de week
+  });
+
+  it("bucketStarts aligns months to calendar month starts", () => {
+    const from = new Date(2026, 7, 15).getTime();
+    const to = new Date(2026, 10, 15).getTime();
+    const starts = bucketStarts(from, to, "1M");
+    expect(starts.map((t) => new Date(t).getMonth())).toEqual([7, 8, 9, 10]);
+  });
+});
+
+describe("createTestCounter", () => {
+  it("generates 365-800 sorted events with +/-1 deltas over the past year", () => {
+    const counter = createTestCounter();
+    expect(counter.name.length).toBeGreaterThan(0);
+    expect(counter.history.length).toBeGreaterThanOrEqual(365);
+    expect(counter.history.length).toBeLessThanOrEqual(800);
+    for (const event of counter.history) {
+      expect(event.delta === 1 || event.delta === -1).toBe(true);
+    }
+    for (let i = 1; i < counter.history.length; i += 1) {
+      expect(Date.parse(counter.history[i].at)).toBeGreaterThanOrEqual(
+        Date.parse(counter.history[i - 1].at),
+      );
+    }
+    const sum = counter.history.reduce((total, event) => total + event.delta, 0);
+    expect(counter.value).toBe(Math.max(0, sum));
+    const first = Date.parse(counter.history[0].at);
+    expect(Date.now() - first).toBeLessThanOrEqual(366 * DAY_MS);
+  });
+});
+
+describe("weekdayHourCounts", () => {
+  it("counts events per weekday (0 = maandag) and hour", () => {
+    const counter = createCounter("Bier", {});
+    counter.history = [
+      { at: new Date(2026, 7, 3, 20, 0).toISOString(), delta: 1 },
+      { at: new Date(2026, 7, 3, 20, 30).toISOString(), delta: 1 },
+      { at: new Date(2026, 7, 9, 9, 0).toISOString(), delta: 1 },
+    ];
+    const grid = weekdayHourCounts(counter);
+    const monday = (new Date(2026, 7, 3).getDay() + 6) % 7;
+    const sunday = (new Date(2026, 7, 9).getDay() + 6) % 7;
+    expect(grid[monday][20]).toBe(2);
+    expect(grid[sunday][9]).toBe(1);
+    expect(grid[monday][9]).toBe(0);
+  });
+});
+
+describe("periodRows", () => {
+  it("buckets events per day with today last", () => {
+    const counter = createCounter("Bier", {});
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    counter.history = [
+      {
+        at: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10).toISOString(),
+        delta: 1,
+      },
+      { at: yesterday.toISOString(), delta: -1 },
+    ];
+    const days = periodRows(counter, "day", 3);
+    expect(days).toHaveLength(3);
+    expect(days[2].events).toBe(1);
+    expect(days[2].net).toBe(1);
+    expect(days[1].events).toBe(1);
+    expect(days[1].net).toBe(-1);
+    expect(days[0].events).toBe(0);
+  });
+
+  it("buckets per month with zero-filled gaps", () => {
+    const counter = createCounter("Bier", {});
+    const now = new Date();
+    counter.history = [
+      { at: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12).toISOString(), delta: 3 },
+      {
+        at: new Date(now.getFullYear(), now.getMonth() - 1, 15, 12).toISOString(),
+        delta: 2,
+      },
+    ];
+    const months = periodRows(counter, "month", 12);
+    expect(months).toHaveLength(12);
+    expect(months[11].events).toBe(1);
+    expect(months[11].net).toBe(3);
+    expect(months[10].events).toBe(1);
+    expect(months[10].net).toBe(2);
+  });
+
+  it("weeks start on monday", () => {
+    const counter = createCounter("Bier", {});
+    const monday = new Date(2026, 7, 3, 12, 0); // 2026-08-03
+    const sunday = new Date(2026, 7, 9, 12, 0); // 2026-08-09
+    counter.history = [
+      { at: monday.toISOString(), delta: 1 },
+      { at: sunday.toISOString(), delta: 1 },
+    ];
+    const weeks = periodRows(counter, "week", 4);
+    const row = weeks.find((r) => r.events > 0);
+    expect(row).toBeDefined();
+    expect(row!.key).toBe("2026-08-03");
+    expect(row!.events).toBe(2);
+  });
+});
+
+describe("periodic reset (non-destructive)", () => {
+  it("periodStartAt aligns to calendar boundaries without an anchor", () => {
+    const now = new Date(2026, 7, 12, 15, 30); // woensdag 12 aug 15:30
+    expect(periodStartAt(now, "hour", null)).toBe(new Date(2026, 7, 12, 15).getTime());
+    expect(periodStartAt(now, "day", null)).toBe(new Date(2026, 7, 12).getTime());
+    expect(periodStartAt(now, "week", null)).toBe(new Date(2026, 7, 10).getTime()); // maandag
+    expect(periodStartAt(now, "month", null)).toBe(new Date(2026, 7, 1).getTime());
+  });
+
+  it("periodStartAt phases fixed cycles from the anchor", () => {
+    const anchor = new Date(2026, 8, 30).getTime(); // 30 sept
+    const later = new Date(2026, 9, 10, 12, 0); // 10 okt 12:00
+    expect(periodStartAt(later, "week", anchor)).toBe(anchor + 7 * DAY_MS);
+    expect(periodStartAt(new Date(2026, 8, 30, 12), "day", anchor)).toBe(anchor);
+  });
+
+  it("month boundaries fall on the anchor day-of-month", () => {
+    const anchor = new Date(2026, 8, 30).getTime();
+    expect(periodStartAt(new Date(2026, 9, 29, 12), "month", anchor)).toBe(
+      new Date(2026, 8, 30).getTime(),
+    );
+    expect(periodStartAt(new Date(2026, 9, 30, 12), "month", anchor)).toBe(
+      new Date(2026, 9, 30).getTime(),
+    );
+    expect(periodStartAt(new Date(2026, 10, 15, 12), "month", anchor)).toBe(
+      new Date(2026, 9, 30).getTime(),
+    );
+  });
+
+  it("effectiveValue derives the per-period value from history", () => {
+    const counter = createCounter("Bier", { resetPeriod: "day" });
+    counter.value = 6;
+    counter.history = [
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 2 },
+      { at: new Date(2026, 7, 10, 22, 0).toISOString(), delta: 1 },
+      { at: new Date(2026, 7, 11, 9, 0).toISOString(), delta: 3 },
+    ];
+    expect(effectiveValue(counter, new Date(2026, 7, 10, 23, 0))).toBe(3); // maandagavond
+    expect(effectiveValue(counter, new Date(2026, 7, 11, 12, 0))).toBe(3); // dinsdagmiddag
+    expect(effectiveValue(counter, new Date(2026, 7, 12, 0, 0))).toBe(0); // woensdag: nieuw dagdeel
+  });
+
+  it("effectiveValue keeps the lifetime value for continuous counters", () => {
+    const counter = createCounter("Bier", { value: 4 });
+    counter.history = [{ at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 1 }];
+    counter.value = 5; // lifetime total matches the recorded +1
+    expect(effectiveValue(counter, new Date(2026, 7, 12))).toBe(5);
+  });
+
+  it("changing the reset cycle never destroys data", () => {
+    const counter = createCounter("Bier", { resetPeriod: "day" });
+    counter.value = 6;
+    counter.history = [
+      { at: new Date(2026, 7, 10, 10, 0).toISOString(), delta: 2 },
+      { at: new Date(2026, 7, 10, 22, 0).toISOString(), delta: 1 },
+      { at: new Date(2026, 7, 11, 9, 0).toISOString(), delta: 3 },
+    ];
+    const weekly = { ...counter, resetPeriod: "week" as const };
+    expect(effectiveValue(weekly, new Date(2026, 7, 12))).toBe(6); // zelfde week: totaal
+    const continuous = { ...counter, resetPeriod: "none" as const };
+    expect(effectiveValue(continuous, new Date(2026, 7, 12))).toBe(6); // alles
   });
 });
 
@@ -395,7 +614,6 @@ describe("export/import", () => {
           {
             name: "Bier",
             value: 5,
-            trackHistory: true,
             history: [
               { at: "geen datum", delta: 1 },
               { at: "2026-08-02T10:00:00.000Z", delta: 0 },
@@ -408,16 +626,14 @@ describe("export/import", () => {
       }),
     );
     const counter = state!.counters[0];
-    expect(counter.trackHistory).toBe(true);
     expect(counter.history.map((e) => e.delta)).toEqual([1, 2]);
     expect(counter.history[0].at).toBe("2026-08-01T10:00:00.000Z");
   });
 
-  it("defaults trackHistory to false and history to empty when missing", () => {
+  it("defaults history to empty when missing", () => {
     const state = parseState(
       JSON.stringify({ counters: [{ name: "Bier", value: 1 }], categories: [] }),
     );
-    expect(state!.counters[0].trackHistory).toBe(false);
     expect(state!.counters[0].history).toEqual([]);
   });
 

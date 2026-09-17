@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { clampWeight } from "./wheelEngine";
+import { clampWeight, parseWeightInput } from "./wheelEngine";
 import { Icon } from "@iconify/vue";
 
 const props = defineProps<{
@@ -19,8 +19,7 @@ function submit() {
   const label = newLabel.value.trim();
   if (!label) return;
 
-  const parsed = newWeight.value.trim() === "" ? 1 : Number(newWeight.value);
-  const weight = clampWeight(parsed);
+  const weight = clampWeight(parseWeightInput(newWeight.value));
 
   emit("addChoice", { label, weight });
   newLabel.value = "";

@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from "vue";
 import ModalShell from "./ModalShell.vue";
 import type { Category, Counter } from "./types";
-import { MAX_VALUE, MIN_VALUE } from "./countersEngine";
+import { MAX_VALUE, MIN_VALUE, RESET_PERIOD_LABELS } from "./countersEngine";
 
 const EMOTICONS = [
   "🍺", "🍷", "🥃", "🍾", "🍸", "🍻",
@@ -22,7 +22,7 @@ const emit = defineEmits<{
     icon: string;
     value: number;
     categoryId: string | null;
-    trackHistory: boolean;
+    resetPeriod: "none" | "hour" | "day" | "week" | "month";
   }];
   delete: [id: string];
   close: [];
@@ -33,7 +33,7 @@ const form = reactive({
   icon: props.counter?.icon ?? "",
   value: props.counter?.value ?? 0,
   categoryId: props.counter?.categoryId ?? null,
-  trackHistory: props.counter?.trackHistory ?? true,
+  resetPeriod: props.counter?.resetPeriod ?? "none",
 });
 
 const valueText = ref(String(props.counter?.value ?? 0));
@@ -71,7 +71,7 @@ function submit() {
     icon: form.icon,
     value,
     categoryId: form.categoryId,
-    trackHistory: form.trackHistory,
+    resetPeriod: form.resetPeriod,
   });
 }
 </script>
@@ -129,13 +129,30 @@ function submit() {
         </select>
       </label>
 
-      <label class="field toggle">
-        <span class="toggle-text">
-          <strong>Geschiedenis bijhouden</strong>
-          <small>Bewaar tijdstippen van + en − om statistieken en een grafiek te tonen.</small>
-        </span>
-        <input v-model="form.trackHistory" type="checkbox" />
-      </label>
+      <div class="field">
+        <span>Start opnieuw op 0</span>
+        <div class="segmented" role="radiogroup" aria-label="Reset cyclus">
+          <button
+            v-for="(label, mode) in RESET_PERIOD_LABELS"
+            :key="mode"
+            type="button"
+            class="seg"
+            :class="{ active: form.resetPeriod === mode }"
+            @click="form.resetPeriod = mode as 'none' | 'hour' | 'day' | 'week' | 'month'"
+          >
+            {{ label }}
+          </button>
+        </div>
+        <p class="field-hint">
+          <template v-if="form.resetPeriod === 'none'">
+            De waarde loopt door tot je zelf reset.
+          </template>
+          <template v-else>
+            Elke periode start op 0. De startdatum van de cyclus kun je later instellen op de
+            tellerpagina.
+          </template>
+        </p>
+      </div>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
 
@@ -274,6 +291,41 @@ select option {
   height: 1.15rem;
   accent-color: #38bdf8;
   flex: none;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  flex-wrap: wrap;
+}
+
+.seg {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.seg.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #e0f2fe;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #64748b;
 }
 
 .error {

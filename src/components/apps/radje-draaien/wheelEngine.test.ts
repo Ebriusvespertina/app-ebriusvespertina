@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  BUILT_IN_PRESETS,
+  DEFAULT_SETTINGS,
   clampWeight,
   formatTimeWithMs,
   makeSlicePath,
+  normalizePresetInput,
+  normalizeSettings,
+  parsePresetJson,
+  parseWeightInput,
   percentages,
   pickWinner,
+  presetToChoices,
+  serializePreset,
   shortenLabel,
+  slugifyName,
   totalWeight,
 } from "./wheelEngine";
 import type { Choice } from "./types";
@@ -102,5 +111,142 @@ describe("makeSlicePath", () => {
 describe("formatTimeWithMs", () => {
   it("formats hours, minutes, seconds and milliseconds", () => {
     expect(formatTimeWithMs(new Date(2026, 0, 1, 9, 5, 3, 42))).toBe("09:05:03.042");
+  });
+});
+
+describe("parseWeightInput", () => {
+  it("defaults empty or missing input to 1", () => {
+    expect(parseWeightInput("")).toBe(1);
+    expect(parseWeightInput(null)).toBe(1);
+    expect(parseWeightInput(undefined)).toBe(1);
+  });
+
+  it("passes numbers through (v-model number cast)", () => {
+    expect(parseWeightInput(3)).toBe(3);
+    expect(parseWeightInput(0)).toBe(0);
+  });
+
+  it("parses numeric strings", () => {
+    expect(parseWeightInput("2.5")).toBe(2.5);
+  });
+
+  it("falls back to 1 for garbage", () => {
+    expect(parseWeightInput("abc")).toBe(1);
+    expect(parseWeightInput(Number.NaN)).toBe(1);
+  });
+});
+
+describe("normalizeSettings", () => {
+  it("returns defaults for missing or garbage input", () => {
+    expect(normalizeSettings(undefined)).toEqual(DEFAULT_SETTINGS);
+    expect(normalizeSettings({ spinSpeed: "warp" })).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("keeps explicit sound and vibrate flags", () => {
+    expect(normalizeSettings({ sound: false }).sound).toBe(false);
+    expect(normalizeSettings({ vibrate: false }).vibrate).toBe(false);
+  });
+
+  it("accepts known spin speeds", () => {
+    expect(normalizeSettings({ spinSpeed: "fast" }).spinSpeed).toBe("fast");
+    expect(normalizeSettings({ spinSpeed: "slow" }).spinSpeed).toBe("slow");
+  });
+});
+
+describe("normalizePresetInput", () => {
+  it("rejects missing or blank names", () => {
+    expect("error" in normalizePresetInput(null)).toBe(true);
+    expect("error" in normalizePresetInput({ choices: [] })).toBe(true);
+  });
+
+  it("rejects presets without choices", () => {
+    const result = normalizePresetInput({ name: "X", choices: [] });
+    expect("error" in result).toBe(true);
+  });
+
+  it("normalizes weights, clamping negatives to zero", () => {
+    const result = normalizePresetInput({
+      name: "Test",
+      choices: [{ label: "A", weight: -4 }, { label: "B", weight: 2.5 }],
+    });
+    expect(result).not.toHaveProperty("error");
+    if ("preset" in result) {
+      expect(result.preset.choices).toEqual([
+        { label: "A", weight: 0 },
+        { label: "B", weight: 2.5 },
+      ]);
+    }
+  });
+
+  it("rejects non-finite weights", () => {
+    const result = normalizePresetInput({
+      name: "Test",
+      choices: [{ label: "A", weight: Infinity }],
+    });
+    expect("error" in result).toBe(true);
+  });
+
+  it("rejects blank labels and overlong names", () => {
+    expect("error" in normalizePresetInput({ name: "X", choices: [{ label: "  ", weight: 1 }] })).toBe(true);
+    expect("error" in normalizePresetInput({ name: "x".repeat(61), choices: [{ label: "A", weight: 1 }] })).toBe(true);
+  });
+});
+
+describe("parsePresetJson / serializePreset", () => {
+  it("round-trips a preset through JSON", () => {
+    const preset = { name: "Avondeten", choices: [{ label: "Pizza", weight: 1 }] };
+    const parsed = parsePresetJson(serializePreset(preset));
+    expect(parsed).toEqual({ preset });
+  });
+
+  it("rejects invalid JSON", () => {
+    expect("error" in parsePresetJson("{ nope")).toBe(true);
+  });
+
+  it("rejects a foreign format envelope", () => {
+    expect("error" in parsePresetJson('{"format":"other","name":"X","choices":[{"label":"A","weight":1}]}')).toBe(true);
+  });
+
+  it("accepts a bare { name, choices } object", () => {
+    const parsed = parsePresetJson('{"name":"X","choices":[{"label":"A","weight":1}]}');
+    expect(parsed).toEqual({ preset: { name: "X", choices: [{ label: "A", weight: 1 }] } });
+  });
+});
+
+describe("slugifyName", () => {
+  it("slugs accents and spaces", () => {
+    expect(slugifyName("Avondeten")).toBe("avondeten");
+    expect(slugifyName("Wie begint?")).toBe("wie-begint");
+    expect(slugifyName("Hé! Twee?" )).toBe("he-twee");
+  });
+
+  it("falls back for empty input", () => {
+    expect(slugifyName("!!!")).toBe("preset");
+  });
+});
+
+describe("presetToChoices", () => {
+  it("assigns fresh ids and keeps labels and weights", () => {
+    const choices = presetToChoices({
+      name: "X",
+      choices: [{ label: "A", weight: 0.5 }],
+    });
+    expect(choices).toHaveLength(1);
+    expect(choices[0].label).toBe("A");
+    expect(choices[0].weight).toBe(0.5);
+    expect(typeof choices[0].id).toBe("string");
+    expect(choices[0].id.length).toBeGreaterThan(0);
+  });
+});
+
+describe("built-in presets", () => {
+  it("are all valid presets with at least one positive-weight choice", () => {
+    for (const preset of BUILT_IN_PRESETS) {
+      const normalized = normalizePresetInput(preset);
+      expect("error" in normalized).toBe(false);
+      if ("preset" in normalized) {
+        expect(normalized.preset.choices.some((c) => c.weight > 0)).toBe(true);
+      }
+    }
   });
 });

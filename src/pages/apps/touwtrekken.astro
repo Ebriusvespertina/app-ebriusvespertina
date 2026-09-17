@@ -1,0 +1,13 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TouwTrekkenPage from '../../components/apps/touwtrekken/TouwTrekkenPage.vue';
+---
+
+<BaseLayout
+	title="Touwtrekken"
+	description="Twee spelers, één telefoon: tik zo snel mogelijk in jouw helft om de knoop naar jouw kant te trekken. Ronde na ronde, eindeloos."
+	appleTitle="Touwtrekken"
+	background="radial-gradient(circle at 15% 0%, rgba(248, 113, 113, 0.14), transparent 30%), radial-gradient(circle at 85% 100%, rgba(96, 165, 250, 0.13), transparent 30%), linear-gradient(180deg, #0f172a 0%, #020617 100%)"
+>
+	<TouwTrekkenPage client:only="vue" />
+</BaseLayout>

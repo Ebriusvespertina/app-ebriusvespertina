@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import CounterCard from "./CounterCard.vue";
+import CounterDetail from "./CounterDetail.vue";
 import CounterForm from "./CounterForm.vue";
 import CategoryForm from "./CategoryForm.vue";
 import ConfirmModal from "./ConfirmModal.vue";
-import StatsModal from "./StatsModal.vue";
 import type { Category, Counter, CountersState } from "./types";
 import {
   STORAGE_KEY,
@@ -14,6 +14,8 @@ import {
   clearHistory,
   createCategory,
   createCounter,
+  createTestCounter,
+  effectiveValue,
   emptyState,
   exportFilename,
   incrementCounter,
@@ -22,7 +24,6 @@ import {
   removeCounter,
   renameCategory,
   serializeState,
-  totals,
   uncategorizedCounters,
   updateCounter,
 } from "./countersEngine";
@@ -41,6 +42,10 @@ function loadState(): CountersState {
 
 const state = ref<CountersState>(loadState());
 
+/** Keeps period-aware values fresh across midnight/week boundaries. */
+const nowMs = ref(Date.now());
+let nowTimer: number | null = null;
+
 function save() {
   try {
     localStorage.setItem(STORAGE_KEY, serializeState(state.value));
@@ -51,10 +56,26 @@ function save() {
 
 watch(state, save, { deep: true });
 
-const groups = computed(() => categoryGroups(state.value));
+const nowDate = () => new Date(nowMs.value);
+const groups = computed(() =>
+  categoryGroups(state.value).map((group) => ({
+    ...group,
+    total: group.counters.reduce(
+      (sum, counter) => sum + effectiveValue(counter, nowDate()),
+      0,
+    ),
+  })),
+);
 const loose = computed(() => uncategorizedCounters(state.value));
-const looseTotal = computed(() => loose.value.reduce((sum, counter) => sum + counter.value, 0));
-const grandTotal = computed(() => totals(state.value));
+const looseTotal = computed(() =>
+  loose.value.reduce((sum, counter) => sum + effectiveValue(counter, nowDate()), 0),
+);
+const grandTotal = computed(() =>
+  state.value.counters.reduce(
+    (sum, counter) => sum + effectiveValue(counter, nowDate()),
+    0,
+  ),
+);
 const counterCount = computed(() => state.value.counters.length);
 
 const importInput = ref<HTMLInputElement | null>(null);
@@ -77,13 +98,43 @@ function showHint(text: string) {
 /** null = closed, "new" = create, Counter = edit. */
 const counterForm = ref<Counter | "new" | null>(null);
 const categoryForm = ref<Category | "new" | null>(null);
-const statsId = ref<string | null>(null);
+const detailId = ref<string | null>(null);
 
-const statsCounter = computed(() =>
-  statsId.value === null
+const detailCounter = computed(() =>
+  detailId.value === null
     ? null
-    : (state.value.counters.find((counter) => counter.id === statsId.value) ?? null),
+    : (state.value.counters.find((counter) => counter.id === detailId.value) ?? null),
 );
+
+function openDetail(id: string) {
+  detailId.value = id;
+  try {
+    history.pushState({ countersDetail: id }, "");
+  } catch {
+    /* history best-effort */
+  }
+}
+
+function closeDetail() {
+  detailId.value = null;
+}
+
+/** Back from a counter page returns to the overview instead of leaving the app. */
+function onPopState() {
+  if (detailId.value !== null) {
+    closeDetail();
+    try {
+      history.replaceState({}, "");
+    } catch {
+      /* history best-effort */
+    }
+  }
+}
+
+function onAddTestCounter() {
+  state.value = addCounter(state.value, createTestCounter());
+  showHint("Test teller toegevoegd (tijdelijk).");
+}
 
 interface ConfirmRequest {
   title: string;
@@ -111,7 +162,7 @@ function onSaveCounter(payload: {
   icon: string;
   value: number;
   categoryId: string | null;
-  trackHistory: boolean;
+  resetPeriod: "none" | "hour" | "day" | "week" | "month";
 }) {
   if (counterForm.value === "new") {
     state.value = addCounter(state.value, createCounter(payload.name, payload));
@@ -121,6 +172,21 @@ function onSaveCounter(payload: {
     showHint("Teller opgeslagen.");
   }
   counterForm.value = null;
+}
+
+function onSaveDetail(
+  id: string,
+  payload: {
+    name: string;
+    icon: string;
+    value: number;
+    categoryId: string | null;
+    resetPeriod: "none" | "hour" | "day" | "week" | "month";
+    periodStart: number | null;
+  },
+) {
+  state.value = updateCounter(state.value, id, payload);
+  showHint("Teller opgeslagen.");
 }
 
 function onDeleteCounter(id: string) {
@@ -133,6 +199,9 @@ function onDeleteCounter(id: string) {
     danger: true,
     onConfirm: () => {
       state.value = removeCounter(state.value, id);
+      if (detailId.value === id) {
+        detailId.value = null;
+      }
       showHint("Teller verwijderd.");
     },
   });
@@ -166,6 +235,9 @@ function onDeleteCategory(id: string) {
 
 function onCount(id: string, delta: number) {
   state.value = incrementCounter(state.value, id, delta);
+  // A fresh event can be newer than the periodic nowMs snapshot; refresh so
+  // the derived period value includes it immediately.
+  nowMs.value = Date.now();
 }
 
 function onClearHistory(id: string) {
@@ -221,6 +293,21 @@ function applyImport() {
   pendingImport.value = null;
 }
 
+onMounted(() => {
+  window.addEventListener("popstate", onPopState);
+  nowTimer = window.setInterval(() => {
+    nowMs.value = Date.now();
+  }, 30_000);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("popstate", onPopState);
+  if (nowTimer !== null) {
+    window.clearInterval(nowTimer);
+    nowTimer = null;
+  }
+});
+
 const formatNumber = (value: number) => value.toLocaleString("nl-NL");
 </script>
 
@@ -241,6 +328,9 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
       </button>
       <button class="btn ghost" type="button" @click="categoryForm = 'new'">
         + Categorie
+      </button>
+      <button class="btn ghost" type="button" @click="onAddTestCounter">
+        🧪 Testdata
       </button>
       <span class="spacer" />
       <button
@@ -319,9 +409,9 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
             v-for="counter in group.counters"
             :key="counter.id"
             :counter="counter"
+            :now-ms="nowMs"
             @count="onCount(counter.id, $event)"
-            @edit="counterForm = counter"
-            @stats="statsId = counter.id"
+            @open="openDetail(counter.id)"
           />
         </div>
       </section>
@@ -336,9 +426,9 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
             v-for="counter in loose"
             :key="counter.id"
             :counter="counter"
+            :now-ms="nowMs"
             @count="onCount(counter.id, $event)"
-            @edit="counterForm = counter"
-            @stats="statsId = counter.id"
+            @open="openDetail(counter.id)"
           />
         </div>
       </section>
@@ -369,11 +459,16 @@ const formatNumber = (value: number) => value.toLocaleString("nl-NL");
       @close="categoryForm = null"
     />
 
-    <StatsModal
-      v-if="statsCounter"
-      :counter="statsCounter"
-      @clear-history="onClearHistory(statsCounter.id)"
-      @close="statsId = null"
+    <CounterDetail
+      v-if="detailCounter"
+      :counter="detailCounter"
+      :categories="state.categories"
+      :now-ms="nowMs"
+      @count="onCount(detailCounter.id, $event)"
+      @save="onSaveDetail(detailCounter.id, $event)"
+      @delete="onDeleteCounter(detailCounter.id)"
+      @clear-history="onClearHistory(detailCounter.id)"
+      @close="closeDetail"
     />
 
     <ConfirmModal
