@@ -126,20 +126,23 @@ function toggleLock(id: number) {
         other.lockGroup = null;
       }
     }
-  } else {
-    const group = nextLockGroup;
-    nextLockGroup += 1;
-
-    const targets = lockByValue.value
-      ? dice.value.filter((other) => !other.locked && other.value === die.value)
-      : [die];
-
-    for (const target of targets) {
-      target.locked = true;
-      target.lockGroup = group;
-    }
+    return;
   }
 
+  const group = nextLockGroup;
+  nextLockGroup += 1;
+
+  const targets = lockByValue.value
+    ? dice.value.filter((other) => !other.locked && other.value === die.value)
+    : [die];
+
+  for (const target of targets) {
+    target.locked = true;
+    target.lockGroup = group;
+  }
+
+  /* Ontgrendelen laat de ronde juist weglopen van het einde; alleen een tik die
+     vergrendelt kan de ronde (bijna) afmaken. */
   if (nearRoundEnd.value) {
     startCooldown();
   }
